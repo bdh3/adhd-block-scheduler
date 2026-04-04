@@ -107,8 +107,6 @@ class TimerService : Service() {
 
                 _totalRemainingSeconds.value = currentTotalRemaining
                 _remainingSeconds.value = (alarmIntervalMinutes * 60) - (sessionElapsedSeconds % (alarmIntervalMinutes * 60))
-                
-                updateNotification()
             }
 
             _isRunning.value = false

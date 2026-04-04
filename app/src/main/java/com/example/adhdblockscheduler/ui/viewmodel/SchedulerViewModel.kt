@@ -143,12 +143,13 @@ class SchedulerViewModel(
         val blocks = mutableListOf<TimeBlock>()
         var currentTime = System.currentTimeMillis()
         
-        val fullBlocks = totalMinutes / alarmInterval
-        val remainder = totalMinutes % alarmInterval
+        val interval = if (alarmInterval <= 0) 15 else alarmInterval
+        val fullBlocks = totalMinutes / interval
+        val remainder = totalMinutes % interval
 
         for (i in 0 until fullBlocks) {
-            blocks.add(TimeBlock(startTime = currentTime, durationMinutes = alarmInterval, type = BlockType.FOCUS))
-            currentTime += alarmInterval * 60 * 1000L
+            blocks.add(TimeBlock(startTime = currentTime, durationMinutes = interval, type = BlockType.FOCUS))
+            currentTime += interval * 60 * 1000L
         }
         
         if (remainder > 0) {
@@ -269,9 +270,9 @@ class SchedulerViewModel(
             pauseTimer()
         } else {
             if (state.totalRemainingSeconds <= 0) {
-                if (state.timeBlocks.isEmpty()) {
-                    generateDefaultBlocks(state.alarmIntervalMinutes, 60)
-                }
+                // 새로운 세션 시작 시 초기화
+                val totalMin = if (state.sessionTotalMinutes > 0) state.sessionTotalMinutes else 60
+                generateDefaultBlocks(state.alarmIntervalMinutes, totalMin)
             }
             
             if (state.selectedTaskId == null && state.tasks.isNotEmpty()) {
@@ -286,8 +287,11 @@ class SchedulerViewModel(
         _uiState.update { it.copy(
             isRunning = false,
             currentBlockIndex = 0,
-            remainingSeconds = if (it.timeBlocks.isNotEmpty()) it.timeBlocks[0].durationMinutes * 60 else 0,
-            totalRemainingSeconds = it.timeBlocks.sumOf { b -> b.durationMinutes * 60 }
+            remainingSeconds = 0,
+            totalRemainingSeconds = 0,
+            timeBlocks = emptyList(),
+            selectedTaskId = null,
+            currentScheduleId = null
         ) }
     }
 
@@ -311,7 +315,8 @@ class SchedulerViewModel(
             onFinished = { onSessionFinished() }
         )
         
-        val initialTotalRemaining = if (state.totalRemainingSeconds <= 0) totalSecAtStart else state.totalRemainingSeconds
+        // UI 상태의 남은 시간이 있으면 그것부터 시작, 없으면 전체 시간으로 시작
+        val initialTotalRemaining = if (state.totalRemainingSeconds > 0) state.totalRemainingSeconds else totalSecAtStart
         timerService?.startTimer(initialTotalRemaining)
     }
 
@@ -323,12 +328,14 @@ class SchedulerViewModel(
         val state = _uiState.value
         if (state.currentBlockIndex < state.timeBlocks.size - 1) {
             val nextIndex = state.currentBlockIndex + 1
-            val nextBlockRemaining = state.timeBlocks
+            // 다음 블록의 시작점까지 남은 전체 시간을 계산
+            val remainingAfterSkip = state.timeBlocks
                 .drop(nextIndex)
                 .sumOf { it.durationMinutes * 60 }
             
-            timerService?.startTimer(nextBlockRemaining)
+            timerService?.startTimer(remainingAfterSkip)
         } else {
+            // 마지막 블록에서 넘기면 세션 종료 (중지와 동일)
             stopTimer()
         }
     }

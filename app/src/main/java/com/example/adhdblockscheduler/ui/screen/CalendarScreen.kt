@@ -113,7 +113,49 @@ fun CalendarScreen(
     }
 
     if (showAddTaskDialog) {
-        // ... (기존 추가 다이얼로그)
+        var taskTitle by remember { mutableStateOf("") }
+        
+        AlertDialog(
+            onDismissRequest = { showAddTaskDialog = false },
+            title = { Text("세션 생성") },
+            text = {
+                Column {
+                    Text("${uiState.selectedBlocks.size * 15}분 동안 진행할 작업을 입력하세요.")
+                    Spacer(Modifier.height(8.dp))
+                    TextField(
+                        value = taskTitle,
+                        onValueChange = { taskTitle = it },
+                        label = { Text("작업명") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val duration = uiState.selectedBlocks.size * 15
+                        val firstBlock = uiState.selectedBlocks.minOrNull() ?: System.currentTimeMillis()
+                        val calendar = Calendar.getInstance().apply { timeInMillis = firstBlock }
+                        
+                        viewModel.addSchedule(
+                            taskTitle = taskTitle.ifBlank { "새 작업" },
+                            durationMinutes = duration,
+                            hourOfDay = calendar.get(Calendar.HOUR_OF_DAY),
+                            startMinutes = calendar.get(Calendar.MINUTE)
+                        )
+                        viewModel.clearSelectedBlocks()
+                        showAddTaskDialog = false
+                    }
+                ) {
+                    Text("생성")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddTaskDialog = false }) {
+                    Text("취소")
+                }
+            }
+        )
     }
 
     if (editingSchedule != null) {

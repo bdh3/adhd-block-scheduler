@@ -25,10 +25,9 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
         ) {
             Text("시간 및 블록 설정 (1시간 기준)", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
             
-            val blockDuration = 60 / uiState.blocksPerHour
             ListItem(
-                headlineContent = { Text("시간 쪼개기 (블록 수)") },
-                supportingContent = { Text("1시간을 ${uiState.blocksPerHour}개로 나눕니다. (개당 ${blockDuration}분)") },
+                headlineContent = { Text("시간 쪼개기 (알림 단위)") },
+                supportingContent = { Text("집중 시간 동안 ${60 / uiState.blocksPerHour}분마다 짧은 알림을 줍니다.") },
                 trailingContent = {
                     Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                         Text("${uiState.blocksPerHour}개")
@@ -44,24 +43,19 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
             )
 
             ListItem(
-                headlineContent = { Text("집중 블록 개수") },
+                headlineContent = { Text("휴식 시간 설정") },
                 supportingContent = { 
-                    val focusMinutes = blockDuration * uiState.focusBlocksCount
-                    val restMinutes = 60 - (blockDuration * uiState.focusBlocksCount)
-                    Text("집중 ${uiState.focusBlocksCount}개(${focusMinutes}분), 휴식 ${uiState.blocksPerHour - uiState.focusBlocksCount}개(${restMinutes}분)") 
+                    val focusMinutes = 60 - uiState.restMinutes
+                    Text("집중 ${focusMinutes}분 후 ${uiState.restMinutes}분간 휴식합니다.") 
                 },
                 trailingContent = {
                     Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                        Text("${uiState.focusBlocksCount}개")
+                        Text("${uiState.restMinutes}분")
                         Slider(
-                            value = uiState.focusBlocksCount.toFloat(),
-                            onValueChange = { 
-                                if (it.toInt() < uiState.blocksPerHour) {
-                                    viewModel.updateFocusBlocksCount(it.toInt())
-                                }
-                            },
-                            valueRange = 0f..maxOf(1f, (uiState.blocksPerHour - 1).toFloat()),
-                            steps = if (uiState.blocksPerHour > 1) uiState.blocksPerHour - 1 else 0,
+                            value = uiState.restMinutes.toFloat(),
+                            onValueChange = { viewModel.updateRestMinutes(it.toInt()) },
+                            valueRange = 0f..30f,
+                            steps = 30,
                             modifier = Modifier.width(120.dp)
                         )
                     }
@@ -69,24 +63,8 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
             )
 
             ListItem(
-                headlineContent = { Text("중간 알림 간격") },
-                supportingContent = { 
-                    Text(if (uiState.notificationInterval > 0) "${uiState.notificationInterval}분마다 짧은 진동을 줍니다." else "중간 알림을 끕니다.") 
-                },
-                trailingContent = {
-                    Slider(
-                        value = uiState.notificationInterval.toFloat(),
-                        onValueChange = { viewModel.updateNotificationInterval(it) },
-                        valueRange = 0f..15f,
-                        steps = 15, // 1분 단위
-                        modifier = Modifier.width(120.dp)
-                    )
-                }
-            )
-
-            ListItem(
                 headlineContent = { Text("진동 알림") },
-                supportingContent = { Text("블록 완료 시 진동으로 알려줍니다.") },
+                supportingContent = { Text("알림 발생 시 진동을 켭니다.") },
                 trailingContent = {
                     Switch(
                         checked = uiState.vibrationEnabled,
@@ -118,7 +96,7 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
             Spacer(modifier = Modifier.weight(1f))
 
             Text(
-                text = "버전 1.0.2",
+                text = "버전 1.0.7",
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(bottom = 16.dp)
             )

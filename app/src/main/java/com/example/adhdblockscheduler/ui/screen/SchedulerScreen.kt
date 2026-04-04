@@ -35,11 +35,6 @@ fun SchedulerScreen(viewModel: SchedulerViewModel) {
             TopAppBar(
                 title = { Text("Focus Flow") }
             )
-        },
-        floatingActionButton = {
-            FloatingActionButton(onClick = { showAddTaskDialog = true }) {
-                Icon(Icons.Default.Add, contentDescription = "할 일 추가")
-            }
         }
     ) { padding ->
         Column(
@@ -99,12 +94,24 @@ fun SchedulerScreen(viewModel: SchedulerViewModel) {
             Spacer(modifier = Modifier.height(24.dp))
 
             // 할 일 선택 목록
-            Text(
-                text = "진행할 작업 선택",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "진행할 작업 선택",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                TextButton(onClick = { showAddTaskDialog = true }) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("추가")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             LazyColumn(
                 modifier = Modifier.weight(1f),

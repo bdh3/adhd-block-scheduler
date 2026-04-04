@@ -68,7 +68,17 @@ fun MainScreen(viewModel: SchedulerViewModel) {
                     navController.navigate(Screen.Timer.route)
                 }) 
             }
-            composable(Screen.Timer.route) { SchedulerScreen(viewModel) }
+            composable(Screen.Timer.route) { 
+                SchedulerScreen(viewModel, onNavigateToCalendar = {
+                    navController.navigate(Screen.Calendar.route) {
+                        popUpTo(navController.graph.findStartDestination().id) {
+                            saveState = true
+                        }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }) 
+            }
             composable(Screen.Settings.route) { SettingsScreen(viewModel) }
         }
     }

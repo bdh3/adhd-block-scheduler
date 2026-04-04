@@ -241,7 +241,7 @@ class SchedulerViewModel(
         _selectedDate.value = dateMillis
     }
 
-    fun selectTask(taskId: String) {
+    fun selectTask(taskId: String?) {
         if (_uiState.value.isRunning) return
         _uiState.update { it.copy(selectedTaskId = taskId) }
     }
@@ -335,10 +335,17 @@ class SchedulerViewModel(
                 .drop(nextIndex)
                 .sumOf { it.durationMinutes * 60 }
             
+            // 현재 블록 인덱스를 업데이트하고 남은 시간을 타이머에 전달
+            _uiState.update { it.copy(
+                currentBlockIndex = nextIndex,
+                remainingSeconds = state.timeBlocks[nextIndex].durationMinutes * 60,
+                totalRemainingSeconds = remainingAfterSkip
+            ) }
             timerService?.startTimer(remainingAfterSkip)
         } else {
-            // 마지막 블록에서 넘기면 세션 종료 (중지와 동일)
-            stopTimer()
+            // 마지막 블록에서 넘기면 세션 종료 (완료 처리)
+            onSessionFinished()
+            timerService?.stopTimer()
         }
     }
 

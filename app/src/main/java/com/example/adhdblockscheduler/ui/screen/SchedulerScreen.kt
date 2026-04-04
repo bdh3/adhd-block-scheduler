@@ -26,9 +26,8 @@ import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SchedulerScreen(viewModel: SchedulerViewModel) {
+fun SchedulerScreen(viewModel: SchedulerViewModel, onNavigateToCalendar: () -> Unit) {
     val uiState by viewModel.uiState.collectAsState()
-    var showAddTaskDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -37,7 +36,6 @@ fun SchedulerScreen(viewModel: SchedulerViewModel) {
             )
         }
     ) { padding ->
-        // 전체 스크롤이 가능하도록 LazyColumn을 최상위 구조로 변경
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -48,7 +46,6 @@ fun SchedulerScreen(viewModel: SchedulerViewModel) {
             contentPadding = PaddingValues(bottom = 32.dp)
         ) {
             item {
-                // 타이머 섹션
                 val totalSeconds = uiState.timeBlocks.sumOf { it.durationMinutes * 60 }
                 val progress = if (totalSeconds > 0) uiState.totalRemainingSeconds.toFloat() / totalSeconds else 0f
                 val currentBlock = uiState.timeBlocks.getOrNull(uiState.currentBlockIndex)
@@ -98,7 +95,6 @@ fun SchedulerScreen(viewModel: SchedulerViewModel) {
                 }
             }
 
-            // 진행한 작업 상태
             item {
                 if (!uiState.isRunning) {
                     Row(
@@ -111,7 +107,7 @@ fun SchedulerScreen(viewModel: SchedulerViewModel) {
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
-                        TextButton(onClick = { showAddTaskDialog = true }) {
+                        TextButton(onClick = onNavigateToCalendar) {
                             Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(4.dp))
                             Text("추가")
@@ -122,7 +118,6 @@ fun SchedulerScreen(viewModel: SchedulerViewModel) {
 
             items(uiState.tasks) { task ->
                 val isSelected = uiState.selectedTaskId == task.id
-                // 타이머 실행 중일 때는 현재 선택된 Task만 보여줌
                 if (uiState.isRunning) {
                     if (isSelected) {
                         TaskItem(
@@ -144,17 +139,6 @@ fun SchedulerScreen(viewModel: SchedulerViewModel) {
                 }
             }
         }
-    }
-
-
-    if (showAddTaskDialog) {
-        AddTaskDialog(
-            onDismiss = { showAddTaskDialog = false },
-            onAdd = { title ->
-                viewModel.addTask(title)
-                showAddTaskDialog = false
-            }
-        )
     }
 }
 
@@ -247,17 +231,17 @@ fun TimerHeader(
                 if (isRunning || remainingSeconds > 0) {
                     OutlinedButton(
                         onClick = onStopTimer,
-                        modifier = Modifier.weight(0.6f),
+                        modifier = Modifier.weight(0.5f),
                         shape = MaterialTheme.shapes.medium,
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
                     ) {
-                        Text("중지")
+                        Text("중지", maxLines = 1)
                     }
                 }
 
                 OutlinedButton(
                     onClick = onSkip,
-                    modifier = Modifier.weight(0.6f),
+                    modifier = Modifier.weight(0.5f),
                     shape = MaterialTheme.shapes.medium
                 ) {
                     Text(text = "넘기기", maxLines = 1)
@@ -323,35 +307,4 @@ fun TaskItem(
             }
         }
     }
-}
-
-@Composable
-fun AddTaskDialog(onDismiss: () -> Unit, onAdd: (String) -> Unit) {
-    var text by remember { mutableStateOf("") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("새로운 할 일") },
-        text = {
-            TextField(
-                value = text,
-                onValueChange = { text = it },
-                placeholder = { Text("할 일을 입력하세요") },
-                singleLine = true
-            )
-        },
-        confirmButton = {
-            Button(
-                onClick = { if (text.isNotBlank()) onAdd(text) },
-                enabled = text.isNotBlank()
-            ) {
-                Text("추가")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("취소")
-            }
-        }
-    )
 }

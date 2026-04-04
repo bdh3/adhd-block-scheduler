@@ -80,33 +80,32 @@ class TimerService : Service() {
     }
 
     fun startTimer(initialTotalRemaining: Int) {
-        if (timerJob?.isActive == true) return
+        timerJob?.cancel()
         _isRunning.value = true
         _totalRemainingSeconds.value = initialTotalRemaining
 
         timerJob = serviceScope.launch {
-            val startTime = System.currentTimeMillis()
-            val startRemaining = _totalRemainingSeconds.value
-
             while (_totalRemainingSeconds.value > 0) {
                 delay(1000L)
-                val elapsedSeconds = ((System.currentTimeMillis() - startTime) / 1000).toInt()
-                val currentTotalRemaining = maxOf(0, startRemaining - elapsedSeconds)
+                val currentTotalRemaining = maxOf(0, _totalRemainingSeconds.value - 1)
                 
                 val sessionElapsedSeconds = totalSecondsAtStart - currentTotalRemaining
-                val newBlockIndex = sessionElapsedSeconds / (alarmIntervalMinutes * 60)
-                val totalBlocks = totalSecondsAtStart / (alarmIntervalMinutes * 60)
+                val intervalSeconds = alarmIntervalMinutes * 60
+                val newBlockIndex = sessionElapsedSeconds / intervalSeconds
                 
                 if (newBlockIndex != _currentBlockIndex.value) {
                     val elapsedMinutes = newBlockIndex * alarmIntervalMinutes
-                    val totalBlocksCount = totalSecondsAtStart / (alarmIntervalMinutes * 60)
-                    val isLast = newBlockIndex >= totalBlocksCount
-                    onTransition(taskTitle, elapsedMinutes, isLast)
+                    val isFinished = currentTotalRemaining <= 0
+                    onTransition(taskTitle, elapsedMinutes, isFinished)
                     _currentBlockIndex.value = newBlockIndex
                 }
 
                 _totalRemainingSeconds.value = currentTotalRemaining
-                _remainingSeconds.value = (alarmIntervalMinutes * 60) - (sessionElapsedSeconds % (alarmIntervalMinutes * 60))
+                _remainingSeconds.value = intervalSeconds - (sessionElapsedSeconds % intervalSeconds)
+                
+                if (currentTotalRemaining % 10 == 0) { // 10초마다 알림 갱신
+                    updateNotification()
+                }
             }
 
             _isRunning.value = false

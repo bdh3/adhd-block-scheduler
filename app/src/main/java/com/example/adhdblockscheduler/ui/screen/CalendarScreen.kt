@@ -121,6 +121,12 @@ fun CalendarScreen(
             text = {
                 Column {
                     Text("${uiState.selectedBlocks.size * 15}분 동안 진행할 작업을 입력하세요.")
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "알림 단위: ${uiState.alarmIntervalMinutes}분 (설정에서 변경 가능)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
                     Spacer(Modifier.height(8.dp))
                     TextField(
                         value = taskTitle,

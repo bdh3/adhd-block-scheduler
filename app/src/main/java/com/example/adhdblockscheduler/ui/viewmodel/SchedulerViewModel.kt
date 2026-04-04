@@ -335,22 +335,26 @@ class SchedulerViewModel(
 
     fun skipBlock() {
         val state = _uiState.value
-        if (state.currentBlockIndex < state.timeBlocks.size - 1) {
-            val nextIndex = state.currentBlockIndex + 1
-            // 다음 블록의 시작점까지 남은 전체 시간을 계산
-            val remainingAfterSkip = state.timeBlocks
-                .drop(nextIndex)
-                .sumOf { it.durationMinutes * 60 }
+        if (!state.isRunning) return
+        
+        val intervalSeconds = state.alarmIntervalMinutes * 60
+        val nextBlockIndex = state.currentBlockIndex + 1
+        val totalBlocks = state.timeBlocks.size
+        
+        if (nextBlockIndex < totalBlocks) {
+            // 다음 블록의 시작 시간으로 점프 (남은 전체 시간을 다음 블록들의 합으로 설정)
+            val newTotalRemainingSeconds = (totalBlocks - nextBlockIndex) * intervalSeconds
             
-            // 현재 블록 인덱스를 업데이트하고 남은 시간을 타이머에 전달
             _uiState.update { it.copy(
-                currentBlockIndex = nextIndex,
-                remainingSeconds = state.timeBlocks[nextIndex].durationMinutes * 60,
-                totalRemainingSeconds = remainingAfterSkip
+                currentBlockIndex = nextBlockIndex,
+                remainingSeconds = intervalSeconds,
+                totalRemainingSeconds = newTotalRemainingSeconds
             ) }
-            timerService?.startTimer(remainingAfterSkip)
+            
+            // 서비스 타이머 갱신
+            timerService?.startTimer(newTotalRemainingSeconds)
         } else {
-            // 마지막 블록에서 넘기면 세션 종료 (완료 처리)
+            // 마지막 블록에서 넘기면 세션 종료
             onSessionFinished()
             timerService?.stopTimer()
         }

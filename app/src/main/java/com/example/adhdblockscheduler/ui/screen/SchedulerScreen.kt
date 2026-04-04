@@ -118,6 +118,27 @@ fun SchedulerScreen(viewModel: SchedulerViewModel, onNavigateToCalendar: () -> U
 
             items(uiState.tasks) { task ->
                 val isSelected = uiState.selectedTaskId == task.id
+                var showDeleteDialog by remember { mutableStateOf(false) }
+
+                if (showDeleteDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showDeleteDialog = false },
+                        title = { Text("작업 삭제") },
+                        text = { Text("'${task.title}' 작업을 삭제하시겠습니까? 캘린더에 등록된 일정도 함께 삭제됩니다.") },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    viewModel.deleteTask(task)
+                                    showDeleteDialog = false
+                                }
+                            ) { Text("삭제", color = MaterialTheme.colorScheme.error) }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showDeleteDialog = false }) { Text("취소") }
+                        }
+                    )
+                }
+
                 if (uiState.isRunning) {
                     if (isSelected) {
                         TaskItem(
@@ -134,7 +155,7 @@ fun SchedulerScreen(viewModel: SchedulerViewModel, onNavigateToCalendar: () -> U
                         isSelected = isSelected,
                         onSelect = { viewModel.selectTask(task.id) },
                         onToggle = { viewModel.toggleTaskCompletion(task) },
-                        onDelete = { viewModel.deleteTask(task) }
+                        onDelete = { showDeleteDialog = true }
                     )
                 }
             }

@@ -89,6 +89,7 @@ class TimerService : Service() {
             while (_totalRemainingSeconds.value > 0) {
                 delay(1000L)
                 val currentTotalRemaining = maxOf(0, _totalRemainingSeconds.value - 1)
+                _totalRemainingSeconds.value = currentTotalRemaining
                 
                 val sessionElapsedSeconds = totalSecondsAtStart - currentTotalRemaining
                 val intervalSeconds = alarmIntervalMinutes * 60
@@ -101,7 +102,6 @@ class TimerService : Service() {
                     _currentBlockIndex.value = newBlockIndex
                 }
 
-                _totalRemainingSeconds.value = currentTotalRemaining
                 _remainingSeconds.value = intervalSeconds - (sessionElapsedSeconds % intervalSeconds)
             }
 
@@ -111,9 +111,9 @@ class TimerService : Service() {
             // 세션 종료 알림 (마지막 블록 완료 시 확실히 호출)
             onTransition(taskTitle, totalSecondsAtStart / 60, true)
 
-            delay(1000L) // 시스템이 알림을 처리할 충분한 시간 확보
+            delay(1500L) // 시스템이 알림을 처리하고 팝업을 띄울 충분한 시간 확보
             onFinished()
-            stopForeground(STOP_FOREGROUND_DETACH) // 서비스 종료 후에도 완료 알림은 남겨둠
+            stopForeground(STOP_FOREGROUND_DETACH) // 서비스 종료 후에도 완료 알림은 유지
             stopSelf()
         }
     }

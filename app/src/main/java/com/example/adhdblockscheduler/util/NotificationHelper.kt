@@ -46,7 +46,7 @@ class NotificationHelper(private val context: Context) {
             val silentChannel = NotificationChannel(
                 SILENT_CHANNEL_ID,
                 "앱 실행 유지 (무음)",
-                NotificationManager.IMPORTANCE_LOW
+                NotificationManager.IMPORTANCE_MIN
             ).apply {
                 description = "타이머 작동 유지를 위한 필수 알림입니다."
                 setShowBadge(false)

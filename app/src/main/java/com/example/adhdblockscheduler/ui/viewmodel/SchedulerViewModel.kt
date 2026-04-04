@@ -299,7 +299,24 @@ class SchedulerViewModel(
 
     fun deleteTask(task: Task) {
         viewModelScope.launch {
+            // 1. Task 삭제
             repository.deleteTask(task)
+            
+            // 2. 만약 스케줄에서 생성된 Task라면(ID가 sched_로 시작) 해당 스케줄도 삭제
+            if (task.id.startsWith("sched_")) {
+                val scheduleId = task.id.removePrefix("sched_")
+                val schedule = scheduleRepository.getScheduleById(scheduleId)
+                if (schedule != null) {
+                    scheduleRepository.deleteSchedule(schedule)
+                }
+            } else {
+                // 일반 Task인 경우 제목이 같은 스케줄이 있는지 확인하여 함께 삭제 (캘린더 동기화)
+                val schedules = scheduleRepository.getSchedulesForDay(_selectedDate.value).first()
+                val relatedSchedule = schedules.find { it.taskTitle == task.title }
+                if (relatedSchedule != null) {
+                    scheduleRepository.deleteSchedule(relatedSchedule)
+                }
+            }
         }
     }
 

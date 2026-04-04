@@ -19,26 +19,42 @@ class NotificationHelper(private val context: Context) {
         context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
     companion object {
-        const val CHANNEL_ID = "block_scheduler_channel_v3"
+        const val ALARM_CHANNEL_ID = "block_scheduler_alarm_channel"
+        const val SILENT_CHANNEL_ID = "block_scheduler_silent_channel"
         const val NOTIFICATION_ID = 1001
         const val FINISHED_NOTIFICATION_ID = 1002
     }
 
     init {
-        createNotificationChannel()
+        createNotificationChannels()
     }
 
-    private fun createNotificationChannel() {
+    private fun createNotificationChannels() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "Focus Flow 몰입 알림",
+            // 1. 알람 채널 (팝업, 소리, 진동 있음)
+            val alarmChannel = NotificationChannel(
+                ALARM_CHANNEL_ID,
+                "몰입 알람 (팝업/소리)",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "작업 진행 상황 및 완료 알림을 제공합니다."
+                description = "주기적인 경과 알림과 완료 알림을 제공합니다."
                 enableVibration(true)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             }
-            notificationManager.createNotificationChannel(channel)
+
+            // 2. 무음 채널 (서비스 유지용, 사용자 방해 금지)
+            val silentChannel = NotificationChannel(
+                SILENT_CHANNEL_ID,
+                "앱 실행 유지 (무음)",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "타이머 작동 유지를 위한 필수 알림입니다."
+                setShowBadge(false)
+                lockscreenVisibility = Notification.VISIBILITY_SECRET
+            }
+
+            notificationManager.createNotificationChannel(alarmChannel)
+            notificationManager.createNotificationChannel(silentChannel)
         }
     }
 
@@ -63,13 +79,15 @@ class NotificationHelper(private val context: Context) {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+        // 중요도가 높은 ALARM_CHANNEL 사용
+        val builder = NotificationCompat.Builder(context, ALARM_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title)
             .setContentText(message)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setDefaults(Notification.DEFAULT_ALL)
             .setContentIntent(pendingIntent)
+            .setFullScreenIntent(pendingIntent, true) // 잠금화면에서도 팝업되도록
             .setAutoCancel(true)
 
         val id = if (isFinished) FINISHED_NOTIFICATION_ID else (NOTIFICATION_ID + 1)

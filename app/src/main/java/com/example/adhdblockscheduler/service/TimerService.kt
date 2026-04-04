@@ -49,26 +49,15 @@ class TimerService : Service() {
 
     override fun onBind(intent: Intent?): IBinder = binder
 
-    override fun onCreate() {
-        super.onCreate()
-    }
-
-    private fun createForegroundNotification(): Notification {
-        val intent = Intent(this, com.example.adhdblockscheduler.ui.MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
-            putExtra("navigate_to", "timer")
-        }
-        val pendingIntent = android.app.PendingIntent.getActivity(
-            this, 0, intent,
-            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
-        )
-
-        return NotificationCompat.Builder(this, NotificationHelper.CHANNEL_ID)
+    private fun createSilentForegroundNotification(): Notification {
+        // 무음 채널(SILENT_CHANNEL_ID)을 사용하여 알림이 방해되지 않도록 함
+        return NotificationCompat.Builder(this, NotificationHelper.SILENT_CHANNEL_ID)
             .setContentTitle("Focus Flow")
-            .setContentText("몰입이 진행 중입니다: $taskTitle")
+            .setContentText("타이머가 백그라운드에서 실행 중입니다.")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setPriority(NotificationCompat.PRIORITY_MIN)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setOngoing(true)
-            .setContentIntent(pendingIntent)
             .build()
     }
 
@@ -93,8 +82,8 @@ class TimerService : Service() {
         _isRunning.value = true
         _totalRemainingSeconds.value = initialTotalRemaining
         
-        // 포그라운드 서비스 시작 (고정 알림 사용)
-        startForeground(NotificationHelper.NOTIFICATION_ID, createForegroundNotification())
+        // 포그라운드 서비스 시작 (무음 알림 사용 - 사용자에게 방해 안 됨)
+        startForeground(NotificationHelper.NOTIFICATION_ID, createSilentForegroundNotification())
 
         timerJob = serviceScope.launch {
             while (_totalRemainingSeconds.value > 0) {
@@ -105,7 +94,7 @@ class TimerService : Service() {
                 val intervalSeconds = alarmIntervalMinutes * 60
                 val newBlockIndex = sessionElapsedSeconds / intervalSeconds
                 
-                // 설정된 주기(15분 등)가 되었을 때만 팝업/진동 알림 발생
+                // 설정된 주기(15분 등)가 되었을 때만 고순위 팝업 알림 발생
                 if (newBlockIndex != _currentBlockIndex.value && currentTotalRemaining > 0) {
                     val elapsedMinutes = (newBlockIndex) * alarmIntervalMinutes
                     onTransition(taskTitle, elapsedMinutes, false)
@@ -114,8 +103,6 @@ class TimerService : Service() {
 
                 _totalRemainingSeconds.value = currentTotalRemaining
                 _remainingSeconds.value = intervalSeconds - (sessionElapsedSeconds % intervalSeconds)
-                
-                // 매 초마다 알림 갱신하던 로직 제거 (요구사항 1 준수)
             }
 
             _isRunning.value = false
@@ -124,9 +111,9 @@ class TimerService : Service() {
             // 세션 종료 알림 (마지막 블록 완료 시 확실히 호출)
             onTransition(taskTitle, totalSecondsAtStart / 60, true)
 
-            delay(500L) // 알림 전달 시간 확보
+            delay(1000L) // 시스템이 알림을 처리할 충분한 시간 확보
             onFinished()
-            stopForeground(STOP_FOREGROUND_DETACH) 
+            stopForeground(STOP_FOREGROUND_DETACH) // 서비스 종료 후에도 완료 알림은 남겨둠
             stopSelf()
         }
     }
@@ -134,6 +121,7 @@ class TimerService : Service() {
     fun pauseTimer() {
         timerJob?.cancel()
         _isRunning.value = false
+        stopForeground(STOP_FOREGROUND_REMOVE)
     }
 
     fun stopTimer() {
@@ -141,10 +129,6 @@ class TimerService : Service() {
         _isRunning.value = false
         _totalRemainingSeconds.value = 0
         _currentBlockIndex.value = 0
-        
-        // 포그라운드 알림 취소
-        val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.cancel(NotificationHelper.NOTIFICATION_ID)
         
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()

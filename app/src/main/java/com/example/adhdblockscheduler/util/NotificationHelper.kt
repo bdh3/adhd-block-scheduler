@@ -21,6 +21,7 @@ class NotificationHelper(private val context: Context) {
     companion object {
         const val CHANNEL_ID = "block_scheduler_channel_v3"
         const val NOTIFICATION_ID = 1001
+        const val FINISHED_NOTIFICATION_ID = 1002 // 종료 알림을 위한 별도 ID (요구사항 4)
     }
 
     init {
@@ -103,7 +104,7 @@ class NotificationHelper(private val context: Context) {
         val message = if (isFinished) "$taskTitle - 모든 세션을 마쳤습니다." else "$taskTitle - ${elapsedMinutes}분 경과"
 
         val intent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP // CLEAR_TASK 제거하여 기존 앱 상태 유지 (요구사항 3)
             putExtra("navigate_to", "timer")
         }
         val pendingIntent = PendingIntent.getActivity(
@@ -119,7 +120,9 @@ class NotificationHelper(private val context: Context) {
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
 
-        notificationManager.notify(NOTIFICATION_ID, builder.build())
+        // 종료 알림은 별도의 ID를 사용하여 서비스 종료 시에도 사라지지 않게 함 (요구사항 4)
+        val id = if (isFinished) FINISHED_NOTIFICATION_ID else NOTIFICATION_ID
+        notificationManager.notify(id, builder.build())
         
         if (vibrationEnabled) {
             if (isFinished) vibrateAlarm() else vibrateDeviceShort()

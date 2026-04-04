@@ -83,7 +83,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        // 새로운 인텐트가 오면 (알림 클릭 등) 해당 경로로 이동할 수 있도록 처리
+        setIntent(intent) // 새로운 인텐트로 교체
+
         val route = intent.getStringExtra("navigate_to")
         if (route != null) {
             setContent {

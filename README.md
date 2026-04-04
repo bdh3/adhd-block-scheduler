@@ -30,7 +30,7 @@
 ## 🚀 빌드 및 실행 방법
 
 1.  **Prerequisites**: Android Studio (Koala 이상 권장), JDK 17 이상
-2.  **Download APK**: [GitHub Releases](https://github.com/bdh3/adhd-block-scheduler/releases)에서 최신 버전(**v1.1.6**)의 APK를 다운로드할 수 있습니다.
+2.  **Download APK**: [GitHub Releases](https://github.com/bdh3/adhd-block-scheduler/releases)에서 최신 버전(**v1.1.8**)의 APK를 다운로드할 수 있습니다.
 3.  **SSH Clone**:
     ```bash
     git clone git@github.com:bdh3/adhd-block-scheduler.git

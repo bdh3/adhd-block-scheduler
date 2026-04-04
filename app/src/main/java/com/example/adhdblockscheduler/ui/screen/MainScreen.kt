@@ -24,13 +24,26 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
 }
 
 @Composable
-fun MainScreen(viewModel: SchedulerViewModel) {
+fun MainScreen(viewModel: SchedulerViewModel, startRoute: String? = null) {
     val navController = rememberNavController()
     val items = listOf(
         Screen.Calendar,
         Screen.Timer,
         Screen.Settings
     )
+
+    // 딥링크 또는 인텐트를 통한 탭 이동 처리 (요구사항 4번)
+    LaunchedEffect(startRoute) {
+        if (startRoute != null) {
+            navController.navigate(startRoute) {
+                popUpTo(navController.graph.findStartDestination().id) {
+                    saveState = true
+                }
+                launchSingleTop = true
+                restoreState = true
+            }
+        }
+    }
 
     Scaffold(
         bottomBar = {

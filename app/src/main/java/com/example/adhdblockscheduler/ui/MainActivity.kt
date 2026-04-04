@@ -23,6 +23,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import com.example.adhdblockscheduler.ADHDBlockSchedulerApplication
 import com.example.adhdblockscheduler.ui.screen.MainScreen
+import com.example.adhdblockscheduler.ui.screen.Screen
 import com.example.adhdblockscheduler.ui.theme.ADHDBlockSchedulerTheme
 import com.example.adhdblockscheduler.ui.viewmodel.SchedulerViewModel
 
@@ -41,6 +42,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        val startRoute = intent.getStringExtra("navigate_to") ?: Screen.Calendar.route
 
         setContent {
             ADHDBlockSchedulerTheme {
@@ -72,7 +75,22 @@ class MainActivity : ComponentActivity() {
                 }
 
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    MainScreen(viewModel = viewModel)
+                    MainScreen(viewModel = viewModel, startRoute = startRoute)
+                }
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // 새로운 인텐트가 오면 (알림 클릭 등) 해당 경로로 이동할 수 있도록 처리
+        val route = intent.getStringExtra("navigate_to")
+        if (route != null) {
+            setContent {
+                ADHDBlockSchedulerTheme {
+                    Surface(modifier = Modifier.fillMaxSize()) {
+                        MainScreen(viewModel = viewModel, startRoute = route)
+                    }
                 }
             }
         }

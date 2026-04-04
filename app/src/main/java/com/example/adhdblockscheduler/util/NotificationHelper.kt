@@ -103,7 +103,8 @@ class NotificationHelper(private val context: Context) {
         val message = if (isFinished) "$taskTitle - 모든 세션을 마쳤습니다." else "$taskTitle - ${elapsedMinutes}분 경과"
 
         val intent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra("navigate_to", "timer")
         }
         val pendingIntent = PendingIntent.getActivity(
             context, 0, intent,

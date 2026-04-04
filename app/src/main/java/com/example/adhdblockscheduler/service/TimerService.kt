@@ -57,7 +57,7 @@ class TimerService : Service() {
     private fun createNotification(): Notification {
         return NotificationCompat.Builder(this, NotificationHelper.CHANNEL_ID)
             .setContentTitle("Focus Flow")
-            .setContentText("타이머가 실행 중입니다.")
+            .setContentText("타이머 대기 중...")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setOngoing(true)
             .build()
@@ -83,6 +83,9 @@ class TimerService : Service() {
         timerJob?.cancel()
         _isRunning.value = true
         _totalRemainingSeconds.value = initialTotalRemaining
+        
+        // 포그라운드 알림 즉시 업데이트 (요구사항 7번 개선)
+        updateNotification()
 
         timerJob = serviceScope.launch {
             while (_totalRemainingSeconds.value > 0) {
@@ -93,30 +96,26 @@ class TimerService : Service() {
                 val intervalSeconds = alarmIntervalMinutes * 60
                 val newBlockIndex = sessionElapsedSeconds / intervalSeconds
                 
-                if (newBlockIndex != _currentBlockIndex.value) {
+                if (newBlockIndex != _currentBlockIndex.value && currentTotalRemaining > 0) {
                     val elapsedMinutes = (newBlockIndex) * alarmIntervalMinutes
-                    val isFinished = currentTotalRemaining <= 0
-                    onTransition(taskTitle, elapsedMinutes, isFinished)
+                    onTransition(taskTitle, elapsedMinutes, false)
                     _currentBlockIndex.value = newBlockIndex
+                    // 알림 갱신
+                    updateNotification()
                 }
 
                 _totalRemainingSeconds.value = currentTotalRemaining
                 _remainingSeconds.value = intervalSeconds - (sessionElapsedSeconds % intervalSeconds)
-                
-                // 실시간 10초 단위 알림 갱신 제거 (요구사항 5번)
-                // if (currentTotalRemaining % 10 == 0) { 
-                //     updateNotification()
-                // }
             }
 
             _isRunning.value = false
             _totalRemainingSeconds.value = 0
             
-            // 세션 종료 알림 명시적 호출 (요구사항 7번)
+            // 세션 종료 알림 (요구사항 3번 버그 수정)
             onTransition(taskTitle, totalSecondsAtStart / 60, true)
 
             onFinished()
-            stopForeground(STOP_FOREGROUND_DETACH)
+            stopForeground(STOP_FOREGROUND_REMOVE) // 알림 유지 대신 제거하거나 명시적 종료 알림으로 대체
             stopSelf()
         }
     }

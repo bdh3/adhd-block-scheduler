@@ -211,11 +211,12 @@ fun TimerHeader(
             Spacer(modifier = Modifier.height(24.dp))
             
             Row(
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Button(
                     onClick = onToggleTimer,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1.2f),
                     shape = MaterialTheme.shapes.medium
                 ) {
                     val isSessionActive = remainingSeconds > 0 && remainingSeconds < 3600*24
@@ -224,14 +225,15 @@ fun TimerHeader(
                             isRunning -> "일시정지"
                             isSessionActive -> "재개"
                             else -> "시작"
-                        }
+                        },
+                        maxLines = 1
                     )
                 }
                 
-                if (isRunning || remainingSeconds > 0) {
+                if (isRunning || (remainingSeconds > 0 && remainingSeconds < 3600*24)) {
                     OutlinedButton(
                         onClick = onStopTimer,
-                        modifier = Modifier.weight(0.5f),
+                        modifier = Modifier.weight(0.7f),
                         shape = MaterialTheme.shapes.medium,
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
                     ) {
@@ -241,7 +243,7 @@ fun TimerHeader(
 
                 OutlinedButton(
                     onClick = onSkip,
-                    modifier = Modifier.weight(0.5f),
+                    modifier = Modifier.weight(0.8f),
                     shape = MaterialTheme.shapes.medium
                 ) {
                     Text(text = "넘기기", maxLines = 1)

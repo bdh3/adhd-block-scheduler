@@ -38,13 +38,14 @@ fun CalendarScreen(
     var isMonthlyView by remember { mutableStateOf(true) }
     val context = LocalContext.current
 
-    val datePickerDialog = remember {
+    val datePickerDialog = remember(selectedDate) {
         val cal = Calendar.getInstance().apply { timeInMillis = selectedDate }
         DatePickerDialog(
             context,
             { _, y, m, d ->
                 val newCal = Calendar.getInstance().apply {
                     set(y, m, d)
+                    set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
                 }
                 viewModel.selectDate(newCal.timeInMillis)
             },

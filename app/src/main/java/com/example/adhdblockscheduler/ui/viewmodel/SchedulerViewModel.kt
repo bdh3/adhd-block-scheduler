@@ -19,9 +19,11 @@ import com.example.adhdblockscheduler.data.repository.ScheduleRepository
 import com.example.adhdblockscheduler.service.TimerService
 import com.example.adhdblockscheduler.util.NotificationHelper
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.util.Calendar
+import java.util.Locale
 
 data class SchedulerUiState(
     val tasks: List<Task> = emptyList(),
@@ -115,15 +117,25 @@ class SchedulerViewModel(
                 set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
             }.timeInMillis
             
-            // 오늘 날짜의 Task와 ScheduleBlock을 결합하여 타이머 작업 목록 생성 (요구사항 3번)
+            // 오늘 날짜의 Task와 ScheduleBlock을 결합하여 타이머 작업 목록 생성 (요구사항 1: 시간 표시 포함)
             combine(
                 repository.getTasksForDate(today),
                 scheduleRepository.getSchedulesForDay(today)
             ) { tasks, schedules ->
                 val combined = tasks.toMutableList()
                 schedules.forEach { schedule ->
-                    if (combined.none { it.title == schedule.taskTitle }) {
-                        combined.add(Task(id = "sched_${schedule.id}", title = schedule.taskTitle, scheduledDateMillis = today))
+                    val cal = Calendar.getInstance().apply { timeInMillis = schedule.startTimeMillis }
+                    val endCal = Calendar.getInstance().apply { 
+                        timeInMillis = schedule.startTimeMillis + schedule.durationMinutes * 60 * 1000L 
+                    }
+                    val timeStr = String.format(Locale.getDefault(), "%02d:%02d ~ %02d:%02d", 
+                        cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE),
+                        endCal.get(Calendar.HOUR_OF_DAY), endCal.get(Calendar.MINUTE))
+                    
+                    val displayTitle = "${schedule.taskTitle} $timeStr"
+                    
+                    if (combined.none { it.title == displayTitle || it.title == schedule.taskTitle }) {
+                        combined.add(Task(id = "sched_${schedule.id}", title = displayTitle, scheduledDateMillis = today))
                     }
                 }
                 combined
@@ -198,10 +210,20 @@ class SchedulerViewModel(
         
         viewModelScope.launch {
             val tasksForDate = repository.getTasksForDate(_selectedDate.value).first()
-            val existingTask = tasksForDate.find { it.title == schedule.taskTitle }
+            
+            val cal = Calendar.getInstance().apply { timeInMillis = schedule.startTimeMillis }
+            val endCal = Calendar.getInstance().apply { 
+                timeInMillis = schedule.startTimeMillis + schedule.durationMinutes * 60 * 1000L 
+            }
+            val timeStr = String.format(Locale.getDefault(), "%02d:%02d ~ %02d:%02d", 
+                cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE),
+                endCal.get(Calendar.HOUR_OF_DAY), endCal.get(Calendar.MINUTE))
+            val displayTitle = "${schedule.taskTitle} $timeStr"
+
+            val existingTask = tasksForDate.find { it.title == displayTitle || it.title == schedule.taskTitle }
             val taskId = existingTask?.id ?: run {
                 val newTask = Task(
-                    title = schedule.taskTitle,
+                    title = displayTitle,
                     scheduledDateMillis = _selectedDate.value
                 )
                 repository.insertTask(newTask)
@@ -211,10 +233,16 @@ class SchedulerViewModel(
             _uiState.update { it.copy(
                 selectedTaskId = taskId,
                 sessionTotalMinutes = schedule.durationMinutes,
-                currentScheduleId = schedule.id
+                currentScheduleId = schedule.id,
+                remainingSeconds = it.alarmIntervalMinutes * 60,
+                totalRemainingSeconds = schedule.durationMinutes * 60
             ) }
             
             generateDefaultBlocks(_uiState.value.alarmIntervalMinutes, schedule.durationMinutes)
+            
+            // 불러온 즉시 시작 (요구사항 2번)
+            delay(100) // UI 업데이트 대기
+            startTimer()
         }
     }
 

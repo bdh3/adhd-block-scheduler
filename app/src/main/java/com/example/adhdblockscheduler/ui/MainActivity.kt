@@ -21,12 +21,22 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
+import com.example.adhdblockscheduler.ADHDBlockSchedulerApplication
 import com.example.adhdblockscheduler.ui.screen.MainScreen
 import com.example.adhdblockscheduler.ui.theme.ADHDBlockSchedulerTheme
 import com.example.adhdblockscheduler.ui.viewmodel.SchedulerViewModel
 
 class MainActivity : ComponentActivity() {
-    private val viewModel: SchedulerViewModel by viewModels { SchedulerViewModel.Factory }
+    private val viewModel: SchedulerViewModel by viewModels {
+        val app = application as ADHDBlockSchedulerApplication
+        SchedulerViewModel.Factory(
+            app = app,
+            repository = app.taskRepository,
+            settingsRepository = app.settingsRepository,
+            statsRepository = app.statsRepository,
+            scheduleRepository = app.scheduleRepository
+        )
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

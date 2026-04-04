@@ -441,4 +441,19 @@ class SchedulerViewModel(
     fun clearSelectedBlocks() {
         _uiState.update { it.copy(selectedBlocks = emptySet()) }
     }
+
+    companion object {
+        fun Factory(
+            app: Application,
+            repository: TaskRepository,
+            settingsRepository: SettingsRepository,
+            statsRepository: StatsRepository,
+            scheduleRepository: ScheduleRepository
+        ): androidx.lifecycle.ViewModelProvider.Factory = object : androidx.lifecycle.ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+                return SchedulerViewModel(app, repository, settingsRepository, statsRepository, scheduleRepository) as T
+            }
+        }
+    }
 }

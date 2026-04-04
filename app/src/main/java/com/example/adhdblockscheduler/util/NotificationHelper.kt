@@ -19,7 +19,7 @@ class NotificationHelper(private val context: Context) {
         context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
     companion object {
-        const val CHANNEL_ID = "block_scheduler_channel"
+        const val CHANNEL_ID = "block_scheduler_channel_v3"
         const val NOTIFICATION_ID = 1001
     }
 
@@ -29,12 +29,13 @@ class NotificationHelper(private val context: Context) {
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val name = "Block Scheduler Notifications"
-            val descriptionText = "Notifications for block completion"
+            val name = "Focus Flow Notifications"
+            val descriptionText = "작업 및 휴식 알림"
             val importance = NotificationManager.IMPORTANCE_HIGH
             val channel = NotificationChannel(CHANNEL_ID, name, importance).apply {
                 description = descriptionText
-                enableVibration(true)
+                enableVibration(false)
+                setSound(null, null)
             }
             notificationManager.createNotificationChannel(channel)
         }

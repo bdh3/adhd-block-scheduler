@@ -35,10 +35,14 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                     Button(
                         onClick = {
                             viewModel.saveSettings(alarmInterval, vibrationEnabled, calendarSyncEnabled)
+                            // 저장 시 스낵바나 토스트 대신 버튼 텍스트 변경으로 간단한 피드백
                         },
                         modifier = Modifier.padding(end = 8.dp)
                     ) {
-                        Text("저장")
+                        val isSaved = uiState.alarmIntervalMinutes == alarmInterval && 
+                                     uiState.vibrationEnabled == vibrationEnabled && 
+                                     uiState.calendarSyncEnabled == calendarSyncEnabled
+                        Text(if (isSaved) "저장됨" else "저장")
                     }
                 }
             )

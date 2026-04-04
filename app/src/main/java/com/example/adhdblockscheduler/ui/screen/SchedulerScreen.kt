@@ -57,6 +57,7 @@ fun SchedulerScreen(viewModel: SchedulerViewModel) {
                 blockType = currentBlock?.type ?: BlockType.FOCUS,
                 selectedTaskTitle = uiState.tasks.find { it.id == uiState.selectedTaskId }?.title,
                 onToggleTimer = { viewModel.toggleTimer() },
+                onStopTimer = { viewModel.stopTimer() },
                 onSkip = { viewModel.skipBlock() }
             )
 
@@ -70,8 +71,8 @@ fun SchedulerScreen(viewModel: SchedulerViewModel) {
             )
             
             Row(
-                modifier = Modifier.fillMaxWidth().height(4.dp),
-                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                modifier = Modifier.fillMaxWidth().height(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 uiState.timeBlocks.forEachIndexed { index, block ->
                     Box(
@@ -94,24 +95,25 @@ fun SchedulerScreen(viewModel: SchedulerViewModel) {
             Spacer(modifier = Modifier.height(24.dp))
 
             // 진행한 작업 상태 (스크롤 가능하게 수정)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "진행할 작업 선택",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                TextButton(onClick = { showAddTaskDialog = true }) {
-                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("추가")
+            if (!uiState.isRunning) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "진행할 작업 선택",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    TextButton(onClick = { showAddTaskDialog = true }) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("추가")
+                    }
                 }
+                Spacer(modifier = Modifier.height(8.dp))
             }
-
-            Spacer(modifier = Modifier.height(8.dp))
 
             LazyColumn(
                 modifier = Modifier.fillMaxWidth().weight(1f),
@@ -120,13 +122,26 @@ fun SchedulerScreen(viewModel: SchedulerViewModel) {
             ) {
                 items(uiState.tasks) { task ->
                     val isSelected = uiState.selectedTaskId == task.id
-                    TaskItem(
-                        task = task,
-                        isSelected = isSelected,
-                        onSelect = { viewModel.selectTask(task.id) },
-                        onToggle = { viewModel.toggleTaskCompletion(task) },
-                        onDelete = { viewModel.deleteTask(task) }
-                    )
+                    // 타이머 실행 중일 때는 현재 선택된 Task만 보여줌
+                    if (uiState.isRunning) {
+                        if (isSelected) {
+                            TaskItem(
+                                task = task,
+                                isSelected = true,
+                                onSelect = {},
+                                onToggle = {},
+                                onDelete = {}
+                            )
+                        }
+                    } else {
+                        TaskItem(
+                            task = task,
+                            isSelected = isSelected,
+                            onSelect = { viewModel.selectTask(task.id) },
+                            onToggle = { viewModel.toggleTaskCompletion(task) },
+                            onDelete = { viewModel.deleteTask(task) }
+                        )
+                    }
                 }
             }
         }
@@ -152,6 +167,7 @@ fun TimerHeader(
     blockType: BlockType,
     selectedTaskTitle: String?,
     onToggleTimer: () -> Unit,
+    onStopTimer: () -> Unit,
     onSkip: () -> Unit
 ) {
     val totalMin = remainingSeconds / 60
@@ -211,18 +227,30 @@ fun TimerHeader(
             Spacer(modifier = Modifier.height(24.dp))
             
             Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Button(
                     onClick = onToggleTimer,
-                    modifier = Modifier.width(140.dp),
+                    modifier = Modifier.weight(1f),
                     shape = MaterialTheme.shapes.medium
                 ) {
-                    Text(if (isRunning) "일시정지" else if (remainingSeconds < 60 * 60) "재개" else "시작")
+                    Text(if (isRunning) "일시정지" else if (remainingSeconds > 0 && remainingSeconds < 3600*24) "재개" else "시작")
                 }
+                
+                if (isRunning || remainingSeconds > 0) {
+                    OutlinedButton(
+                        onClick = onStopTimer,
+                        modifier = Modifier.weight(0.6f),
+                        shape = MaterialTheme.shapes.medium,
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text("중지")
+                    }
+                }
+
                 OutlinedButton(
                     onClick = onSkip,
-                    modifier = Modifier.width(100.dp),
+                    modifier = Modifier.weight(0.6f),
                     shape = MaterialTheme.shapes.medium
                 ) {
                     Text("넘기기")

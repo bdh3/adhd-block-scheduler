@@ -329,12 +329,6 @@ class SchedulerViewModel(
         }
     }
 
-    fun updateNotificationInterval(minutes: Float) {
-        viewModelScope.launch {
-            settingsRepository.setNotificationIntervalMinutes(minutes)
-        }
-    }
-
     companion object {
         val Factory: ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")

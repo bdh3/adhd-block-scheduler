@@ -50,8 +50,8 @@ fun SchedulerScreen(viewModel: SchedulerViewModel) {
             val currentBlock = uiState.timeBlocks.getOrNull(uiState.currentBlockIndex)
 
             TimerHeader(
-                remainingSeconds = uiState.totalRemainingSeconds, // 전체 시간을 메인으로 표시
-                currentBlockRemaining = uiState.remainingSeconds, // 현재 블록 남은 시간
+                remainingSeconds = uiState.totalRemainingSeconds,
+                currentBlockRemaining = uiState.remainingSeconds,
                 isRunning = uiState.isRunning,
                 progress = progress,
                 blockType = currentBlock?.type ?: BlockType.FOCUS,
@@ -93,7 +93,7 @@ fun SchedulerScreen(viewModel: SchedulerViewModel) {
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // 할 일 선택 목록
+            // 진행한 작업 상태 (스크롤 가능하게 수정)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -114,8 +114,9 @@ fun SchedulerScreen(viewModel: SchedulerViewModel) {
             Spacer(modifier = Modifier.height(8.dp))
 
             LazyColumn(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(bottom = 16.dp)
             ) {
                 items(uiState.tasks) { task ->
                     val isSelected = uiState.selectedTaskId == task.id
@@ -178,7 +179,7 @@ fun TimerHeader(
             )
             
             Text(
-                text = if (blockType == BlockType.FOCUS) "현재: 집중 블록 ($blockTimeText 남음)" else "현재: 휴식 블록 ($blockTimeText 남음)",
+                text = "현재 블록 $blockTimeText 남음",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.secondary,
                 modifier = Modifier.padding(bottom = 16.dp)
@@ -217,7 +218,7 @@ fun TimerHeader(
                     modifier = Modifier.width(140.dp),
                     shape = MaterialTheme.shapes.medium
                 ) {
-                    Text(if (isRunning) "일시정지" else "흐름 시작")
+                    Text(if (isRunning) "일시정지" else if (remainingSeconds < 60 * 60) "재개" else "시작")
                 }
                 OutlinedButton(
                     onClick = onSkip,

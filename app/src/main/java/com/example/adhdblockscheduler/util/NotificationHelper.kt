@@ -40,6 +40,34 @@ class NotificationHelper(private val context: Context) {
         }
     }
 
+    fun showSimpleNotification(
+        title: String,
+        message: String,
+        vibrationEnabled: Boolean
+    ) {
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            context, 0, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle(title)
+            .setContentText(message)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+
+        notificationManager.notify(NOTIFICATION_ID, builder.build())
+        
+        if (vibrationEnabled) {
+            vibrateDevice()
+        }
+    }
+
     fun showBlockTransitionNotification(
         finishedType: BlockType,
         nextType: BlockType?,

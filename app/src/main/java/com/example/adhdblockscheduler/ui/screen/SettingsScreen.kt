@@ -11,10 +11,37 @@ import com.example.adhdblockscheduler.ui.viewmodel.SchedulerViewModel
 @Composable
 fun SettingsScreen(viewModel: SchedulerViewModel) {
     val uiState by viewModel.uiState.collectAsState()
+    
+    var alarmInterval by remember { mutableIntStateOf(uiState.alarmIntervalMinutes) }
+    var vibrationEnabled by remember { mutableStateOf(uiState.vibrationEnabled) }
+    var calendarSyncEnabled by remember { mutableStateOf(uiState.calendarSyncEnabled) }
+
+    // 초기값 동기화 (한 번만)
+    LaunchedEffect(uiState.alarmIntervalMinutes) {
+        alarmInterval = uiState.alarmIntervalMinutes
+    }
+    LaunchedEffect(uiState.vibrationEnabled) {
+        vibrationEnabled = uiState.vibrationEnabled
+    }
+    LaunchedEffect(uiState.calendarSyncEnabled) {
+        calendarSyncEnabled = uiState.calendarSyncEnabled
+    }
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("설정") })
+            TopAppBar(
+                title = { Text("설정") },
+                actions = {
+                    Button(
+                        onClick = {
+                            viewModel.saveSettings(alarmInterval, vibrationEnabled, calendarSyncEnabled)
+                        },
+                        modifier = Modifier.padding(end = 8.dp)
+                    ) {
+                        Text("저장")
+                    }
+                }
+            )
         }
     ) { padding ->
         Column(
@@ -23,39 +50,31 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                 .padding(padding)
                 .padding(16.dp)
         ) {
-            Text("시간 및 블록 설정 (1시간 기준)", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+            Text("알림 설정", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
             
             ListItem(
-                headlineContent = { Text("시간 쪼개기 (알림 단위)") },
-                supportingContent = { Text("집중 시간 동안 ${60 / uiState.blocksPerHour}분마다 짧은 알림을 줍니다.") },
+                headlineContent = { Text("알림 단위") },
+                supportingContent = { Text("작업 중 ${alarmInterval}분마다 알림을 줍니다.") },
                 trailingContent = {
                     Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                        Text("${uiState.blocksPerHour}개")
+                        Text("${alarmInterval}분")
                         Slider(
-                            value = uiState.blocksPerHour.toFloat(),
-                            onValueChange = { viewModel.updateBlocksPerHour(it.toInt()) },
-                            valueRange = 1f..60f,
-                            steps = 59,
-                            modifier = Modifier.width(120.dp)
-                        )
-                    }
-                }
-            )
-
-            ListItem(
-                headlineContent = { Text("휴식 시간 설정") },
-                supportingContent = { 
-                    val focusMinutes = 60 - uiState.restMinutes
-                    Text("집중 ${focusMinutes}분 후 ${uiState.restMinutes}분간 휴식합니다.") 
-                },
-                trailingContent = {
-                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                        Text("${uiState.restMinutes}분")
-                        Slider(
-                            value = uiState.restMinutes.toFloat(),
-                            onValueChange = { viewModel.updateRestMinutes(it.toInt()) },
-                            valueRange = 0f..30f,
-                            steps = 30,
+                            value = when(alarmInterval) {
+                                5 -> 0f
+                                15 -> 1f
+                                30 -> 2f
+                                else -> 1f
+                            },
+                            onValueChange = { 
+                                alarmInterval = when(it.toInt()) {
+                                    0 -> 5
+                                    1 -> 15
+                                    2 -> 30
+                                    else -> 15
+                                }
+                            },
+                            valueRange = 0f..2f,
+                            steps = 1,
                             modifier = Modifier.width(120.dp)
                         )
                     }
@@ -67,26 +86,12 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                 supportingContent = { Text("알림 발생 시 진동을 켭니다.") },
                 trailingContent = {
                     Switch(
-                        checked = uiState.vibrationEnabled,
-                        onCheckedChange = { viewModel.updateVibration(it) }
+                        checked = vibrationEnabled,
+                        onCheckedChange = { 
+                            vibrationEnabled = it
+                            if (it) viewModel.updateVibration(true)
+                        }
                     )
-                }
-            )
-
-            ListItem(
-                headlineContent = { Text("알림 주기 설정") },
-                supportingContent = { Text("집중 시간 중 ${uiState.alarmIntervalMinutes}분마다 알림을 줍니다.") },
-                trailingContent = {
-                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                        Text("${uiState.alarmIntervalMinutes}분")
-                        Slider(
-                            value = uiState.alarmIntervalMinutes.toFloat(),
-                            onValueChange = { viewModel.updateAlarmIntervalMinutes(it.toInt()) },
-                            valueRange = 5f..30f,
-                            steps = 5,
-                            modifier = Modifier.width(120.dp)
-                        )
-                    }
                 }
             )
 
@@ -104,8 +109,8 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                 supportingContent = { Text("집중 블록 완료 시 삼성/구글 캘린더에 기록합니다.") },
                 trailingContent = {
                     Switch(
-                        checked = uiState.calendarSyncEnabled,
-                        onCheckedChange = { viewModel.updateCalendarSync(it) }
+                        checked = calendarSyncEnabled,
+                        onCheckedChange = { calendarSyncEnabled = it }
                     )
                 }
             )

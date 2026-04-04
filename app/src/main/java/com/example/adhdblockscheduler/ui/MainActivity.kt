@@ -1,9 +1,14 @@
 package com.example.adhdblockscheduler.ui
 
 import android.Manifest
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -29,15 +34,13 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             ADHDBlockSchedulerTheme {
-                // 알림 권한 요청 로직 (Android 13+)
                 val context = LocalContext.current
                 val launcher = rememberLauncherForActivityResult(
                     ActivityResultContracts.RequestPermission()
-                ) { isGranted ->
-                    // 권한 결과 처리 (필요시)
-                }
+                ) { _ -> }
 
                 LaunchedEffect(Unit) {
+                    // 알림 권한 요청 (Android 13+)
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                         if (ContextCompat.checkSelfPermission(
                                 context,
@@ -46,6 +49,15 @@ class MainActivity : ComponentActivity() {
                         ) {
                             launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
                         }
+                    }
+
+                    // 배터리 최적화 제외 요청 (타이머 정확도 및 백그라운드 알림 유지)
+                    val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+                    if (!powerManager.isIgnoringBatteryOptimizations(context.packageName)) {
+                        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                            data = Uri.parse("package:${context.packageName}")
+                        }
+                        context.startActivity(intent)
                     }
                 }
 

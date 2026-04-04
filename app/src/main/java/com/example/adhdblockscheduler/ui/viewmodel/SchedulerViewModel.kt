@@ -34,12 +34,26 @@ class SchedulerViewModel(
         _uiState,
         repository.allTasks,
         settingsRepository.calendarSyncEnabled,
-        settingsRepository.blockDurationMinutes
-    ) { state, tasks, calendarSync, duration ->
+        settingsRepository.vibrationEnabled,
+        settingsRepository.blocksPerHour,
+        settingsRepository.focusBlocksCount,
+        settingsRepository.notificationIntervalMinutes
+    ) { Array ->
+        val state = Array[0] as SchedulerUiState
+        val tasks = Array[1] as List<Task>
+        val calendarSync = Array[2] as Boolean
+        val vibration = Array[3] as Boolean
+        val blocksPerHour = Array[4] as Int
+        val focusCount = Array[5] as Int
+        val interval = Array[6] as Float
+
         state.copy(
             tasks = tasks,
             calendarSyncEnabled = calendarSync,
-            blockDuration = duration.toInt()
+            vibrationEnabled = vibration,
+            blocksPerHour = blocksPerHour,
+            focusBlocksCount = focusCount,
+            notificationInterval = interval.toInt()
         )
     }.stateIn(
         scope = viewModelScope,
@@ -51,36 +65,32 @@ class SchedulerViewModel(
 
     init {
         viewModelScope.launch {
-            settingsRepository.blockDurationMinutes.collect { duration ->
-                generateDefaultBlocks(duration.toInt())
+            combine(
+                settingsRepository.blocksPerHour,
+                settingsRepository.focusBlocksCount
+            ) { perHour, focus -> perHour to focus }.collect { (perHour, focus) ->
+                if (!_uiState.value.isRunning) {
+                    generateDefaultBlocks(perHour, focus)
+                }
             }
         }
     }
 
-    private fun generateDefaultBlocks(duration: Int) {
+    private fun generateDefaultBlocks(blocksPerHour: Int, focusCount: Int) {
+        val blockDuration = 60 / blocksPerHour
         val blocks = mutableListOf<TimeBlock>()
-        val currentTime = System.currentTimeMillis()
-        
-        for (i in 0 until 3) {
-            blocks.add(
-                TimeBlock(
-                    startTime = currentTime + (i * duration * 60 * 1000L),
-                    durationMinutes = duration,
-                    type = BlockType.FOCUS
-                )
-            )
+        var currentTime = System.currentTimeMillis()
+
+        for (i in 0 until blocksPerHour) {
+            val type = if (i < focusCount) BlockType.FOCUS else BlockType.REST
+            blocks.add(TimeBlock(startTime = currentTime, durationMinutes = blockDuration, type = type))
+            currentTime += blockDuration * 60 * 1000L
         }
-        blocks.add(
-            TimeBlock(
-                startTime = currentTime + (3 * duration * 60 * 1000L),
-                durationMinutes = duration,
-                type = BlockType.REST
-            )
-        )
         
         _uiState.update { it.copy(
             timeBlocks = blocks,
-            remainingSeconds = blocks.firstOrNull()?.durationMinutes?.times(60) ?: 0
+            currentBlockIndex = 0,
+            remainingSeconds = blocks[0].durationMinutes * 60
         ) }
     }
 
@@ -96,12 +106,28 @@ class SchedulerViewModel(
         if (timerJob?.isActive == true) return
         _uiState.update { it.copy(isRunning = true) }
         
+        val startTime = System.currentTimeMillis()
+        val initialSeconds = _uiState.value.remainingSeconds
+        var lastIntervalNotificationTime = initialSeconds
+
         timerJob = viewModelScope.launch {
             while (_uiState.value.remainingSeconds > 0) {
-                delay(1000L)
-                _uiState.update { it.copy(remainingSeconds = it.remainingSeconds - 1) }
+                delay(500L)
+                val elapsedSeconds = ((System.currentTimeMillis() - startTime) / 1000).toInt()
+                val newRemaining = maxOf(0, initialSeconds - elapsedSeconds)
+                
+                // 중간 알림 로직 (설정된 간격마다)
+                val interval = _uiState.value.notificationInterval
+                if (interval > 0 && (lastIntervalNotificationTime - newRemaining) >= (interval * 60)) {
+                    if (_uiState.value.vibrationEnabled) {
+                        notificationHelper.vibrateDeviceShort()
+                    }
+                    lastIntervalNotificationTime = newRemaining
+                }
+
+                _uiState.update { it.copy(remainingSeconds = newRemaining) }
             }
-            onBlockFinished()
+            onBlockFinished(showNotification = true)
         }
     }
 
@@ -110,15 +136,20 @@ class SchedulerViewModel(
         _uiState.update { it.copy(isRunning = false) }
     }
 
-    private fun onBlockFinished() {
+    private fun onBlockFinished(showNotification: Boolean = true) {
         val currentState = _uiState.value
         val currentIndex = currentState.currentBlockIndex
         val finishedBlock = currentState.timeBlocks[currentIndex]
         val finishedBlockType = finishedBlock.type
         val nextIndex = currentIndex + 1
         
-        // 알림 및 진동 발생
-        notificationHelper.showBlockFinishedNotification(finishedBlockType)
+        // 건너뛰기가 아닐 때만 알림 및 진동 발생
+        if (showNotification) {
+            notificationHelper.showBlockFinishedNotification(
+                blockType = finishedBlockType,
+                vibrationEnabled = currentState.vibrationEnabled
+            )
+        }
 
         // 통계 저장 및 캘린더 연동
         viewModelScope.launch {
@@ -156,9 +187,15 @@ class SchedulerViewModel(
         }
     }
 
-    fun updateBlockDuration(minutes: Float) {
+    fun updateBlocksPerHour(count: Int) {
         viewModelScope.launch {
-            settingsRepository.setBlockDurationMinutes(minutes)
+            settingsRepository.setBlocksPerHour(count)
+        }
+    }
+
+    fun updateFocusBlocksCount(count: Int) {
+        viewModelScope.launch {
+            settingsRepository.setFocusBlocksCount(count)
         }
     }
 
@@ -170,7 +207,7 @@ class SchedulerViewModel(
 
     fun skipBlock() {
         pauseTimer()
-        onBlockFinished()
+        onBlockFinished(showNotification = false)
     }
 
     fun addTask(title: String) {
@@ -192,6 +229,18 @@ class SchedulerViewModel(
     fun deleteTask(task: Task) {
         viewModelScope.launch {
             repository.deleteTask(task)
+        }
+    }
+
+    fun updateVibration(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setVibrationEnabled(enabled)
+        }
+    }
+
+    fun updateNotificationInterval(minutes: Float) {
+        viewModelScope.launch {
+            settingsRepository.setNotificationIntervalMinutes(minutes)
         }
     }
 
@@ -218,5 +267,8 @@ data class SchedulerUiState(
     val remainingSeconds: Int = 0,
     val isRunning: Boolean = false,
     val calendarSyncEnabled: Boolean = false,
-    val blockDuration: Int = 15
+    val vibrationEnabled: Boolean = true,
+    val blocksPerHour: Int = 4,
+    val focusBlocksCount: Int = 3,
+    val notificationInterval: Int = 0
 )

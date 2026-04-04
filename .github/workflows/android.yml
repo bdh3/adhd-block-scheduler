@@ -26,7 +26,7 @@ jobs:
 
     - name: Decode Keystore
       run: |
-        echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > app/debug.keystore
+        echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > app/focus-app.keystore
 
     - name: Build Debug APK
       run: ./gradlew assembleDebug

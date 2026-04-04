@@ -24,9 +24,8 @@ android {
 
     signingConfigs {
         create("release") {
-            // 프로젝트 루트(app/)에 있는 debug.keystore를 고정 사용
-            // 이 파일이 레포지토리에 있어야 GitHub Actions에서도 동일한 서명이 생성됩니다.
-            storeFile = file("debug.keystore")
+            // 새로 생성하신 focus-app.keystore 파일명으로 변경
+            storeFile = file("focus-app.keystore")
             storePassword = "android"
             keyAlias = "androiddebugkey"
             keyPassword = "android"

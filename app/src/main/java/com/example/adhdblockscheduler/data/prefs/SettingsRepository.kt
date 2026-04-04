@@ -17,6 +17,7 @@ class SettingsRepository(private val context: Context) {
         val BLOCKS_PER_HOUR = intPreferencesKey("blocks_per_hour")
         val REST_MINUTES = intPreferencesKey("rest_minutes")
         val VIBRATION_ENABLED = booleanPreferencesKey("vibration_enabled")
+        val ALARM_INTERVAL_MINUTES = intPreferencesKey("alarm_interval_minutes")
     }
 
     val calendarSyncEnabled: Flow<Boolean> = context.dataStore.data
@@ -37,6 +38,11 @@ class SettingsRepository(private val context: Context) {
     val restMinutes: Flow<Int> = context.dataStore.data
         .map { preferences ->
             preferences[REST_MINUTES] ?: 15 // Default: 15 min rest
+        }
+
+    val alarmIntervalMinutes: Flow<Int> = context.dataStore.data
+        .map { preferences ->
+            preferences[ALARM_INTERVAL_MINUTES] ?: 15 // Default: 15 min interval
         }
 
     suspend fun setCalendarSyncEnabled(enabled: Boolean) {
@@ -60,6 +66,12 @@ class SettingsRepository(private val context: Context) {
     suspend fun setVibrationEnabled(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[VIBRATION_ENABLED] = enabled
+        }
+    }
+
+    suspend fun setAlarmIntervalMinutes(minutes: Int) {
+        context.dataStore.edit { preferences ->
+            preferences[ALARM_INTERVAL_MINUTES] = minutes
         }
     }
 

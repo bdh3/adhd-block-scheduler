@@ -2,8 +2,12 @@ package com.example.adhdblockscheduler.ui.screen
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.border
 import androidx.compose.material.icons.Icons
@@ -16,7 +20,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -35,23 +41,28 @@ fun CalendarScreen(
     val selectedDate by viewModel.selectedDate.collectAsState()
     var showAddTaskDialog by remember { mutableStateOf(false) }
     var selectedHour by remember { mutableStateOf(-1) }
+    var isMonthlyView by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("포커스 플로우 캘린더") },
                 actions = {
+                    TextButton(onClick = { isMonthlyView = !isMonthlyView }) {
+                        Text(if (isMonthlyView) "일간 보기" else "월간 보기")
+                    }
                     IconButton(onClick = {
                         val cal = Calendar.getInstance().apply {
                             timeInMillis = selectedDate
-                            add(Calendar.DAY_OF_YEAR, -1)
+                            add(if (isMonthlyView) Calendar.MONTH else Calendar.DAY_OF_YEAR, -1)
                         }
                         viewModel.selectDate(cal.timeInMillis)
                     }) {
                         Text("<")
                     }
                     Text(
-                        text = if (isToday(selectedDate)) "오늘" 
+                        text = if (isMonthlyView) formatMonth(selectedDate)
+                               else if (isToday(selectedDate)) "오늘" 
                                else if (isTomorrow(selectedDate)) "내일"
                                else formatDate(selectedDate),
                         style = MaterialTheme.typography.bodyMedium
@@ -59,7 +70,7 @@ fun CalendarScreen(
                     IconButton(onClick = {
                         val cal = Calendar.getInstance().apply {
                             timeInMillis = selectedDate
-                            add(Calendar.DAY_OF_YEAR, 1)
+                            add(if (isMonthlyView) Calendar.MONTH else Calendar.DAY_OF_YEAR, 1)
                         }
                         viewModel.selectDate(cal.timeInMillis)
                     }) {
@@ -69,40 +80,28 @@ fun CalendarScreen(
             )
         }
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
-            // 시간대별 그리드
-            LazyColumn(
-                modifier = Modifier.fillMaxSize()
-            ) {
-                items((0..23).toList()) { hour ->
-                    val schedule = uiState.dailySchedules.find { 
-                        val cal = Calendar.getInstance().apply { timeInMillis = it.startTimeMillis }
-                        cal.get(Calendar.HOUR_OF_DAY) == hour 
-                    }
-
-                    TimeRow(
-                        hour = hour,
-                        schedule = schedule,
-                        isCurrent = schedule?.id != null && schedule.id == uiState.currentScheduleId,
-                        isRunning = uiState.isRunning,
-                        onClick = {
-                            if (schedule == null) {
-                                selectedHour = hour
-                                showAddTaskDialog = true
-                            } else {
-                                // 기존 일정이 있으면 해당 일정으로 타이머 진입
-                                viewModel.loadScheduledSession(schedule)
-                                onNavigateToTimer()
-                            }
-                        }
-                    )
-                    HorizontalDivider(color = Color.LightGray.copy(alpha = 0.5f))
-                }
-            }
+        if (isMonthlyView) {
+            MonthlyCalendarView(
+                selectedDate = selectedDate,
+                onDateSelected = { 
+                    viewModel.selectDate(it)
+                    isMonthlyView = false
+                },
+                modifier = Modifier.padding(padding)
+            )
+        } else {
+            DailyTimelineView(
+                uiState = uiState,
+                onAddSchedule = { hour ->
+                    selectedHour = hour
+                    showAddTaskDialog = true
+                },
+                onLoadSchedule = { schedule ->
+                    viewModel.loadScheduledSession(schedule)
+                    onNavigateToTimer()
+                },
+                modifier = Modifier.padding(padding)
+            )
         }
     }
 
@@ -122,20 +121,20 @@ fun CalendarScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    TextField(
-                        value = sessionMinutes,
-                        onValueChange = { if (it.all { char -> char.isDigit() }) sessionMinutes = it },
-                        label = { Text("총 작업 시간 (분)") },
-                        modifier = Modifier.fillMaxWidth()
+                    Text("작업 시간 (드래그하여 조절 가능)", style = MaterialTheme.typography.labelSmall)
+                    Slider(
+                        value = sessionMinutes.toFloatOrNull() ?: 60f,
+                        onValueChange = { sessionMinutes = it.toInt().toString() },
+                        valueRange = 15f..120f,
+                        steps = 7
                     )
+                    Text("${sessionMinutes}분", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 }
             },
             confirmButton = {
                 TextButton(onClick = {
                     val minutes = sessionMinutes.toIntOrNull() ?: 60
                     if (taskTitle.isNotBlank()) {
-                        // 미래의 일정인 경우 저장만 하고, 오늘인 경우 바로 시작할지 선택 가능하지만
-                        // 여기서는 스케줄에 추가하는 방향으로 구현
                         viewModel.addSchedule(taskTitle, minutes, selectedHour)
                         showAddTaskDialog = false
                     }
@@ -149,6 +148,110 @@ fun CalendarScreen(
                 }
             }
         )
+    }
+}
+
+@Composable
+fun MonthlyCalendarView(
+    selectedDate: Long,
+    onDateSelected: (Long) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val calendar = Calendar.getInstance().apply {
+        timeInMillis = selectedDate
+        set(Calendar.DAY_OF_MONTH, 1)
+    }
+    val monthStartDayOfWeek = calendar.get(Calendar.DAY_OF_WEEK) - 1
+    val daysInMonth = calendar.getActualMaximum(Calendar.DAY_OF_MONTH)
+    
+    val days = mutableListOf<Long?>()
+    for (i in 0 until monthStartDayOfWeek) days.add(null)
+    for (i in 1..daysInMonth) {
+        val cal = calendar.clone() as Calendar
+        cal.set(Calendar.DAY_OF_MONTH, i)
+        days.add(cal.timeInMillis)
+    }
+
+    Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
+        Row(modifier = Modifier.fillMaxWidth()) {
+            listOf("일", "월", "화", "수", "목", "금", "토").forEach { day ->
+                Text(
+                    text = day,
+                    modifier = Modifier.weight(1f),
+                    textAlign = TextAlign.Center,
+                    fontWeight = FontWeight.Bold,
+                    color = if (day == "일") Color.Red else if (day == "토") Color.Blue else Color.Unspecified
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(7),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            items(days) { dateMillis ->
+                if (dateMillis != null) {
+                    val cal = Calendar.getInstance().apply { timeInMillis = dateMillis }
+                    val day = cal.get(Calendar.DAY_OF_MONTH)
+                    val isSelected = isSameDay(dateMillis, selectedDate)
+                    val isToday = isToday(dateMillis)
+
+                    Box(
+                        modifier = Modifier
+                            .aspectRatio(1f)
+                            .padding(4.dp)
+                            .clip(MaterialTheme.shapes.small)
+                            .background(
+                                if (isSelected) MaterialTheme.colorScheme.primaryContainer
+                                else if (isToday) MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
+                                else Color.Transparent
+                            )
+                            .clickable { onDateSelected(dateMillis) },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = day.toString(),
+                            fontWeight = if (isSelected || isToday) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Unspecified
+                        )
+                    }
+                } else {
+                    Spacer(modifier = Modifier.aspectRatio(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DailyTimelineView(
+    uiState: com.example.adhdblockscheduler.ui.viewmodel.SchedulerUiState,
+    onAddSchedule: (Int) -> Unit,
+    onLoadSchedule: (ScheduleBlock) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    LazyColumn(modifier = modifier.fillMaxSize()) {
+        items((0..23).toList()) { hour ->
+            val schedule = uiState.dailySchedules.find { 
+                val cal = Calendar.getInstance().apply { timeInMillis = it.startTimeMillis }
+                cal.get(Calendar.HOUR_OF_DAY) == hour 
+            }
+
+            TimeRow(
+                hour = hour,
+                schedule = schedule,
+                isCurrent = schedule?.id != null && schedule.id == uiState.currentScheduleId,
+                isRunning = uiState.isRunning,
+                onClick = {
+                    if (schedule == null) {
+                        onAddSchedule(hour)
+                    } else {
+                        onLoadSchedule(schedule)
+                    }
+                }
+            )
+            HorizontalDivider(color = Color.LightGray.copy(alpha = 0.5f))
+        }
     }
 }
 
@@ -231,16 +334,6 @@ fun TimeRow(
                         fontWeight = if (isCurrent) FontWeight.ExtraBold else FontWeight.Bold,
                         textDecoration = if (schedule.isCompleted) TextDecoration.LineThrough else null
                     )
-                    
-                    if (isCurrent && isRunning) {
-                        Spacer(modifier = Modifier.weight(1f))
-                        Text(
-                            text = "진행 중",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
                 }
             }
         }
@@ -251,6 +344,13 @@ fun TimeRow(
             }
         }
     }
+}
+
+private fun isSameDay(m1: Long, m2: Long): Boolean {
+    val cal1 = Calendar.getInstance().apply { timeInMillis = m1 }
+    val cal2 = Calendar.getInstance().apply { timeInMillis = m2 }
+    return cal1.get(Calendar.YEAR) == cal2.get(Calendar.YEAR) &&
+           cal1.get(Calendar.DAY_OF_YEAR) == cal2.get(Calendar.DAY_OF_YEAR)
 }
 
 private fun isToday(millis: Long): Boolean {
@@ -269,5 +369,10 @@ private fun isTomorrow(millis: Long): Boolean {
 
 private fun formatDate(millis: Long): String {
     val sdf = SimpleDateFormat("MM/dd", Locale.getDefault())
+    return sdf.format(Date(millis))
+}
+
+private fun formatMonth(millis: Long): String {
+    val sdf = SimpleDateFormat("yyyy/MM", Locale.getDefault())
     return sdf.format(Date(millis))
 }

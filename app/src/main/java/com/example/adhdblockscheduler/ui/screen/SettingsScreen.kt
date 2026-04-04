@@ -73,6 +73,23 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                 }
             )
 
+            ListItem(
+                headlineContent = { Text("알림 주기 설정") },
+                supportingContent = { Text("집중 시간 중 ${uiState.alarmIntervalMinutes}분마다 알림을 줍니다.") },
+                trailingContent = {
+                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        Text("${uiState.alarmIntervalMinutes}분")
+                        Slider(
+                            value = uiState.alarmIntervalMinutes.toFloat(),
+                            onValueChange = { viewModel.updateAlarmIntervalMinutes(it.toInt()) },
+                            valueRange = 5f..30f,
+                            steps = 5,
+                            modifier = Modifier.width(120.dp)
+                        )
+                    }
+                }
+            )
+
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
             Text(
@@ -96,7 +113,7 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
             Spacer(modifier = Modifier.weight(1f))
 
             Text(
-                text = "버전 1.0.7",
+                text = "버전 1.1.0",
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(bottom = 16.dp)
             )

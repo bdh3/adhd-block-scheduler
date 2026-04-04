@@ -46,6 +46,7 @@ class SchedulerViewModel(
         settingsRepository.vibrationEnabled,
         settingsRepository.blocksPerHour,
         settingsRepository.restMinutes,
+        settingsRepository.alarmIntervalMinutes,
         _selectedDate.flatMapLatest { scheduleRepository.getSchedulesForDay(it) }
     ) { params ->
         val state = params[0] as SchedulerUiState
@@ -54,7 +55,8 @@ class SchedulerViewModel(
         val vibration = params[3] as Boolean
         val blocksPerHour = params[4] as Int
         val restMin = params[5] as Int
-        val dailySchedules = params[6] as List<ScheduleBlock>
+        val alarmInterval = params[6] as Int
+        val dailySchedules = params[7] as List<ScheduleBlock>
 
         // 전체 남은 시간 계산
         val currentBlockRemaining = state.remainingSeconds
@@ -69,6 +71,7 @@ class SchedulerViewModel(
             vibrationEnabled = vibration,
             blocksPerHour = blocksPerHour,
             restMinutes = restMin,
+            alarmIntervalMinutes = alarmInterval,
             totalRemainingSeconds = totalRemaining,
             dailySchedules = dailySchedules
         )
@@ -411,6 +414,12 @@ class SchedulerViewModel(
         }
     }
 
+    fun updateAlarmIntervalMinutes(minutes: Int) {
+        viewModelScope.launch {
+            settingsRepository.setAlarmIntervalMinutes(minutes)
+        }
+    }
+
     fun toggleTaskCompletion(task: Task) {
         viewModelScope.launch {
             val updatedTask = task.copy(isCompleted = !task.isCompleted)
@@ -466,5 +475,6 @@ data class SchedulerUiState(
     val vibrationEnabled: Boolean = true,
     val blocksPerHour: Int = 4,
     val restMinutes: Int = 15,
+    val alarmIntervalMinutes: Int = 15,
     val currentScheduleId: String? = null
 )

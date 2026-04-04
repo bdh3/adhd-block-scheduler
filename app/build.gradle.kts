@@ -13,8 +13,8 @@ android {
         applicationId = "com.example.adhdblockscheduler"
         minSdk = 26
         targetSdk = 34
-        versionCode = 8
-        versionName = "1.0.8"
+        versionCode = 10
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -36,13 +36,7 @@ android {
         val variant = this
         variant.outputs.all {
             val output = this as com.android.build.gradle.internal.api.BaseVariantOutputImpl
-            // 'debug' 문자열을 제거하고 버전명을 명시
-            val nameWithoutDebug = variant.name.replace("debug", "").trim()
-            val fileName = if (nameWithoutDebug.isEmpty()) {
-                "ADHDBlockScheduler_v${variant.versionName}.apk"
-            } else {
-                "ADHDBlockScheduler_v${variant.versionName}_$nameWithoutDebug.apk"
-            }
+            val fileName = "FocusFlow_v${variant.versionName}.apk"
             output.outputFileName = fileName
         }
     }

@@ -32,9 +32,15 @@ jobs:
       with:
         files: app/build/outputs/apk/debug/*.apk
         tag_name: ${{ github.ref_name }}
-        name: ADHD Block Scheduler ${{ github.ref_name }}
+        name: Focus Flow ${{ github.ref_name }}
         body: |
-          ADHD 블록 스케줄러의 새로운 버전이 출시되었습니다! 🚀
+          Focus Flow v1.1.0 정식 버전이 출시되었습니다! 🚀
+          
+          **신기능 안내:**
+          - 📅 **월간 달력 뷰**: 한눈에 파악하는 몰입 통계
+          - 🖐️ **드래그 시간 선택**: 더 직관적인 세션 설정 (Slider 방식 도입)
+          - ⏱️ **알림 주기 설정**: 집중 시간 중 원하는 간격으로 알림 받기
+          - 🏷️ **브랜드 통합**: 앱 이름을 'Focus Flow'로 최종 확정
           
           **설치 방법:**
           아래 Assets에서 .apk 파일을 다운로드하여 설치해 주세요.

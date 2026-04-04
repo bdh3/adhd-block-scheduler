@@ -37,115 +37,115 @@ fun SchedulerScreen(viewModel: SchedulerViewModel) {
             )
         }
     ) { padding ->
-        Column(
+        // 전체 스크롤이 가능하도록 LazyColumn을 최상위 구조로 변경
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(horizontal = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(24.dp),
+            contentPadding = PaddingValues(bottom = 32.dp)
         ) {
-            // 타이머 섹션
-            val totalSeconds = uiState.timeBlocks.sumOf { it.durationMinutes * 60 }
-            val progress = if (totalSeconds > 0) uiState.totalRemainingSeconds.toFloat() / totalSeconds else 0f
-            val currentBlock = uiState.timeBlocks.getOrNull(uiState.currentBlockIndex)
+            item {
+                // 타이머 섹션
+                val totalSeconds = uiState.timeBlocks.sumOf { it.durationMinutes * 60 }
+                val progress = if (totalSeconds > 0) uiState.totalRemainingSeconds.toFloat() / totalSeconds else 0f
+                val currentBlock = uiState.timeBlocks.getOrNull(uiState.currentBlockIndex)
 
-            TimerHeader(
-                remainingSeconds = uiState.totalRemainingSeconds,
-                currentBlockRemaining = uiState.remainingSeconds,
-                isRunning = uiState.isRunning,
-                progress = progress,
-                blockType = currentBlock?.type ?: BlockType.FOCUS,
-                selectedTaskTitle = uiState.tasks.find { it.id == uiState.selectedTaskId }?.title,
-                onToggleTimer = { viewModel.toggleTimer() },
-                onStopTimer = { viewModel.stopTimer() },
-                onSkip = { viewModel.skipBlock() }
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // 집중 흐름 인디케이터 (단순화)
-            Text(
-                text = "현재 세션 흐름",
-                style = MaterialTheme.typography.titleSmall,
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
-            )
-            
-            Row(
-                modifier = Modifier.fillMaxWidth().height(8.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                uiState.timeBlocks.forEachIndexed { index, block ->
-                    Box(
-                        modifier = Modifier
-                            .weight(block.durationMinutes.toFloat())
-                            .fillMaxHeight()
-                            .background(
-                                color = when {
-                                    index < uiState.currentBlockIndex -> MaterialTheme.colorScheme.outlineVariant
-                                    index == uiState.currentBlockIndex -> MaterialTheme.colorScheme.primary
-                                    block.type == BlockType.FOCUS -> MaterialTheme.colorScheme.primaryContainer
-                                    else -> MaterialTheme.colorScheme.secondaryContainer
-                                },
-                                shape = MaterialTheme.shapes.extraSmall
-                            )
-                    )
-                }
+                TimerHeader(
+                    remainingSeconds = uiState.totalRemainingSeconds,
+                    currentBlockRemaining = uiState.remainingSeconds,
+                    isRunning = uiState.isRunning,
+                    progress = progress,
+                    blockType = currentBlock?.type ?: BlockType.FOCUS,
+                    selectedTaskTitle = uiState.tasks.find { it.id == uiState.selectedTaskId }?.title,
+                    onToggleTimer = { viewModel.toggleTimer() },
+                    onStopTimer = { viewModel.stopTimer() },
+                    onSkip = { viewModel.skipBlock() }
+                )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // 진행한 작업 상태 (스크롤 가능하게 수정)
-            if (!uiState.isRunning) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+            item {
+                Column {
                     Text(
-                        text = "진행할 작업 선택",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
+                        text = "현재 세션 흐름",
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
                     )
-                    TextButton(onClick = { showAddTaskDialog = true }) {
-                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("추가")
-                    }
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-            }
-
-            LazyColumn(
-                modifier = Modifier.fillMaxWidth().weight(1f),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(bottom = 16.dp)
-            ) {
-                items(uiState.tasks) { task ->
-                    val isSelected = uiState.selectedTaskId == task.id
-                    // 타이머 실행 중일 때는 현재 선택된 Task만 보여줌
-                    if (uiState.isRunning) {
-                        if (isSelected) {
-                            TaskItem(
-                                task = task,
-                                isSelected = true,
-                                onSelect = {},
-                                onToggle = {},
-                                onDelete = {}
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth().height(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        uiState.timeBlocks.forEachIndexed { index, block ->
+                            Box(
+                                modifier = Modifier
+                                    .weight(block.durationMinutes.toFloat())
+                                    .fillMaxHeight()
+                                    .background(
+                                        color = when {
+                                            index < uiState.currentBlockIndex -> MaterialTheme.colorScheme.outlineVariant
+                                            index == uiState.currentBlockIndex -> MaterialTheme.colorScheme.primary
+                                            block.type == BlockType.FOCUS -> MaterialTheme.colorScheme.primaryContainer
+                                            else -> MaterialTheme.colorScheme.secondaryContainer
+                                        },
+                                        shape = MaterialTheme.shapes.extraSmall
+                                    )
                             )
                         }
-                    } else {
+                    }
+                }
+            }
+
+            // 진행한 작업 상태
+            item {
+                if (!uiState.isRunning) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "진행할 작업 선택",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        TextButton(onClick = { showAddTaskDialog = true }) {
+                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("추가")
+                        }
+                    }
+                }
+            }
+
+            items(uiState.tasks) { task ->
+                val isSelected = uiState.selectedTaskId == task.id
+                // 타이머 실행 중일 때는 현재 선택된 Task만 보여줌
+                if (uiState.isRunning) {
+                    if (isSelected) {
                         TaskItem(
                             task = task,
-                            isSelected = isSelected,
-                            onSelect = { viewModel.selectTask(task.id) },
-                            onToggle = { viewModel.toggleTaskCompletion(task) },
-                            onDelete = { viewModel.deleteTask(task) }
+                            isSelected = true,
+                            onSelect = {},
+                            onToggle = {},
+                            onDelete = {}
                         )
                     }
+                } else {
+                    TaskItem(
+                        task = task,
+                        isSelected = isSelected,
+                        onSelect = { viewModel.selectTask(task.id) },
+                        onToggle = { viewModel.toggleTaskCompletion(task) },
+                        onDelete = { viewModel.deleteTask(task) }
+                    )
                 }
             }
         }
     }
+
 
     if (showAddTaskDialog) {
         AddTaskDialog(
@@ -260,7 +260,7 @@ fun TimerHeader(
                     modifier = Modifier.weight(0.6f),
                     shape = MaterialTheme.shapes.medium
                 ) {
-                    Text("넘기기")
+                    Text(text = "넘기기", maxLines = 1)
                 }
             }
         }

@@ -29,13 +29,13 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
 
     Scaffold(
         topBar = {
-            val isModified = uiState.alarmIntervalMinutes != alarmInterval || 
-                             uiState.vibrationEnabled != vibrationEnabled || 
-                             uiState.calendarSyncEnabled != calendarSyncEnabled
-            
             TopAppBar(
                 title = { Text("설정") },
                 actions = {
+                    val isModified = (uiState.alarmIntervalMinutes != alarmInterval) || 
+                                     (uiState.vibrationEnabled != vibrationEnabled) || 
+                                     (uiState.calendarSyncEnabled != calendarSyncEnabled)
+
                     Button(
                         onClick = {
                             viewModel.saveSettings(alarmInterval, vibrationEnabled, calendarSyncEnabled)

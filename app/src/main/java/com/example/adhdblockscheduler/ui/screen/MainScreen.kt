@@ -44,6 +44,7 @@ fun MainScreen(viewModel: SchedulerViewModel) {
                         selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true,
                         onClick = {
                             navController.navigate(screen.route) {
+                                // 기존 백스택을 유지하면서 이동하도록 수정
                                 popUpTo(navController.graph.findStartDestination().id) {
                                     saveState = true
                                 }

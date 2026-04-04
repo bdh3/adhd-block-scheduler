@@ -2,6 +2,7 @@ package com.example.adhdblockscheduler.ui.screen
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -49,45 +50,45 @@ fun SchedulerScreen(viewModel: SchedulerViewModel) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // 타이머 섹션
+            val totalSeconds = uiState.timeBlocks.sumOf { it.durationMinutes * 60 }
+            val progress = if (totalSeconds > 0) uiState.totalRemainingSeconds.toFloat() / totalSeconds else 0f
             val currentBlock = uiState.timeBlocks.getOrNull(uiState.currentBlockIndex)
-            val totalSeconds = (currentBlock?.durationMinutes ?: 15) * 60
-            val progress = if (totalSeconds > 0) uiState.remainingSeconds.toFloat() / totalSeconds else 0f
 
             TimerHeader(
-                remainingSeconds = uiState.remainingSeconds,
-                totalRemainingSeconds = uiState.totalRemainingSeconds,
+                remainingSeconds = uiState.totalRemainingSeconds, // 전체 시간을 메인으로 표시
+                currentBlockRemaining = uiState.remainingSeconds, // 현재 블록 남은 시간
                 isRunning = uiState.isRunning,
                 progress = progress,
                 blockType = currentBlock?.type ?: BlockType.FOCUS,
+                selectedTaskTitle = uiState.tasks.find { it.id == uiState.selectedTaskId }?.title,
                 onToggleTimer = { viewModel.toggleTimer() },
                 onSkip = { viewModel.skipBlock() }
             )
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // 오늘의 블록 (가로 진행 바 형태)
+            // 집중 흐름 인디케이터 (단순화)
             Text(
-                text = "오늘의 블록",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
+                text = "현재 세션 흐름",
+                style = MaterialTheme.typography.titleSmall,
                 modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
             )
             
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                modifier = Modifier.fillMaxWidth().height(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 uiState.timeBlocks.forEachIndexed { index, block ->
                     Box(
                         modifier = Modifier
-                            .weight(1f)
-                            .height(8.dp)
+                            .weight(block.durationMinutes.toFloat())
+                            .fillMaxHeight()
                             .background(
                                 color = when {
+                                    index < uiState.currentBlockIndex -> MaterialTheme.colorScheme.outlineVariant
                                     index == uiState.currentBlockIndex -> MaterialTheme.colorScheme.primary
-                                    block.isCompleted -> MaterialTheme.colorScheme.outlineVariant
-                                    block.type == BlockType.FOCUS -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-                                    else -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
+                                    block.type == BlockType.FOCUS -> MaterialTheme.colorScheme.primaryContainer
+                                    else -> MaterialTheme.colorScheme.secondaryContainer
                                 },
                                 shape = MaterialTheme.shapes.extraSmall
                             )
@@ -97,9 +98,9 @@ fun SchedulerScreen(viewModel: SchedulerViewModel) {
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // 할 일 목록 섹션
+            // 할 일 선택 목록
             Text(
-                text = "할 일 목록",
+                text = "진행할 작업 선택",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
@@ -110,8 +111,11 @@ fun SchedulerScreen(viewModel: SchedulerViewModel) {
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(uiState.tasks) { task ->
+                    val isSelected = uiState.selectedTaskId == task.id
                     TaskItem(
                         task = task,
+                        isSelected = isSelected,
+                        onSelect = { viewModel.selectTask(task.id) },
                         onToggle = { viewModel.toggleTaskCompletion(task) },
                         onDelete = { viewModel.deleteTask(task) }
                     )
@@ -134,20 +138,21 @@ fun SchedulerScreen(viewModel: SchedulerViewModel) {
 @Composable
 fun TimerHeader(
     remainingSeconds: Int,
-    totalRemainingSeconds: Int,
+    currentBlockRemaining: Int,
     isRunning: Boolean,
     progress: Float,
     blockType: BlockType,
+    selectedTaskTitle: String?,
     onToggleTimer: () -> Unit,
     onSkip: () -> Unit
 ) {
-    val minutes = remainingSeconds / 60
-    val seconds = remainingSeconds % 60
-    val timeText = String.format(Locale.getDefault(), "%02d:%02d", minutes, seconds)
+    val totalMin = remainingSeconds / 60
+    val totalSec = remainingSeconds % 60
+    val timeText = String.format(Locale.getDefault(), "%02d:%02d", totalMin, totalSec)
 
-    val totalMinutes = totalRemainingSeconds / 60
-    val totalSecondsRem = totalRemainingSeconds % 60
-    val totalTimeText = String.format(Locale.getDefault(), "%02d:%02d", totalMinutes, totalSecondsRem)
+    val blockMin = currentBlockRemaining / 60
+    val blockSec = currentBlockRemaining % 60
+    val blockTimeText = String.format(Locale.getDefault(), "%02d:%02d", blockMin, blockSec)
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -157,46 +162,42 @@ fun TimerHeader(
             modifier = Modifier.padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = if (blockType == BlockType.FOCUS) "집중 중" else "휴식 중",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = if (blockType == BlockType.FOCUS) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
-                    fontWeight = FontWeight.Bold
-                )
-                
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    shape = MaterialTheme.shapes.small
-                ) {
-                    Text(
-                        text = "전체 남은 시간: $totalTimeText",
-                        style = MaterialTheme.typography.labelMedium,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = selectedTaskTitle ?: "작업을 선택하세요",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+            
+            Text(
+                text = if (blockType == BlockType.FOCUS) "현재: 집중 블록 ($blockTimeText 남음)" else "현재: 휴식 블록 ($blockTimeText 남음)",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.secondary,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
 
             Box(contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(
                     progress = { progress },
-                    modifier = Modifier.size(200.dp),
+                    modifier = Modifier.size(220.dp),
                     strokeWidth = 12.dp,
                     color = if (blockType == BlockType.FOCUS) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
                     trackColor = MaterialTheme.colorScheme.surfaceVariant,
                     strokeCap = StrokeCap.Round
                 )
-                Text(
-                    text = timeText,
-                    style = MaterialTheme.typography.displayLarge,
-                    fontWeight = FontWeight.Bold
-                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = timeText,
+                        style = MaterialTheme.typography.displayLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "전체 남은 시간",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
             }
             
             Spacer(modifier = Modifier.height(24.dp))
@@ -206,15 +207,17 @@ fun TimerHeader(
             ) {
                 Button(
                     onClick = onToggleTimer,
-                    modifier = Modifier.width(120.dp)
+                    modifier = Modifier.width(140.dp),
+                    shape = MaterialTheme.shapes.medium
                 ) {
-                    Text(if (isRunning) "일시정지" else "시작")
+                    Text(if (isRunning) "일시정지" else "흐름 시작")
                 }
                 OutlinedButton(
                     onClick = onSkip,
-                    modifier = Modifier.width(120.dp)
+                    modifier = Modifier.width(100.dp),
+                    shape = MaterialTheme.shapes.medium
                 ) {
-                    Text("건너뛰기")
+                    Text("넘기기")
                 }
             }
         }
@@ -222,15 +225,28 @@ fun TimerHeader(
 }
 
 @Composable
-fun TaskItem(task: Task, onToggle: () -> Unit, onDelete: () -> Unit) {
+fun TaskItem(
+    task: Task, 
+    isSelected: Boolean,
+    onSelect: () -> Unit,
+    onToggle: () -> Unit, 
+    onDelete: () -> Unit
+) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onSelect() },
         colors = CardDefaults.cardColors(
-            containerColor = if (task.isCompleted) 
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f) 
-                else MaterialTheme.colorScheme.surface
+            containerColor = when {
+                isSelected -> MaterialTheme.colorScheme.primaryContainer
+                task.isCompleted -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                else -> MaterialTheme.colorScheme.surface
+            }
         ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        border = BorderStroke(
+            width = if (isSelected) 2.dp else 1.dp, 
+            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+        )
     ) {
         Row(
             modifier = Modifier
@@ -246,11 +262,21 @@ fun TaskItem(task: Task, onToggle: () -> Unit, onDelete: () -> Unit) {
                 text = task.title,
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.bodyLarge.copy(
-                    textDecoration = if (task.isCompleted) TextDecoration.LineThrough else null
+                    textDecoration = if (task.isCompleted) TextDecoration.LineThrough else null,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                 )
             )
-            IconButton(onClick = onDelete) {
-                Icon(Icons.Default.Delete, contentDescription = "삭제", tint = MaterialTheme.colorScheme.error)
+            if (!isSelected) {
+                IconButton(onClick = onDelete) {
+                    Icon(Icons.Default.Delete, contentDescription = "삭제", tint = MaterialTheme.colorScheme.error)
+                }
+            } else {
+                Text(
+                    text = "선택됨",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(end = 8.dp)
+                )
             }
         }
     }

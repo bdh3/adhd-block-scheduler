@@ -102,10 +102,18 @@ class SchedulerViewModel(
         ) }
     }
 
+    fun selectTask(taskId: String) {
+        _uiState.update { it.copy(selectedTaskId = taskId) }
+    }
+
     fun toggleTimer() {
         if (_uiState.value.isRunning) {
             pauseTimer()
         } else {
+            if (_uiState.value.selectedTaskId == null && _uiState.value.tasks.isNotEmpty()) {
+                // 할 일을 선택하지 않고 시작하면 첫 번째 할 일 자동 선택
+                selectTask(_uiState.value.tasks[0].id)
+            }
             startTimer()
         }
     }
@@ -115,55 +123,87 @@ class SchedulerViewModel(
         _uiState.update { it.copy(isRunning = true) }
         
         timerJob = viewModelScope.launch {
-            while (true) {
-                val currentState = _uiState.value
-                val currentIndex = currentState.currentBlockIndex
-                val currentBlock = currentState.timeBlocks.getOrNull(currentIndex) ?: break
-                
-                val initialSeconds = currentState.remainingSeconds
-                val startTime = System.currentTimeMillis()
-                var lastIntervalNotificationTime = initialSeconds
+            // 전체 1시간(또는 설정된 총 블록 시간)을 하나의 루프로 관리
+            val totalSecondsAtStart = _uiState.value.timeBlocks.sumOf { it.durationMinutes * 60 }
+            if (_uiState.value.totalRemainingSeconds <= 0) {
+                _uiState.update { it.copy(totalRemainingSeconds = totalSecondsAtStart) }
+            }
 
-                while (_uiState.value.remainingSeconds > 0) {
-                    delay(500L)
-                    val elapsedSeconds = ((System.currentTimeMillis() - startTime) / 1000).toInt()
-                    val newRemaining = maxOf(0, initialSeconds - elapsedSeconds)
-                    
-                    // 중간 알림 로직 (설정된 간격마다)
-                    val interval = _uiState.value.notificationInterval
-                    if (interval > 0 && (lastIntervalNotificationTime - newRemaining) >= (interval * 60)) {
-                        if (_uiState.value.vibrationEnabled) {
-                            notificationHelper.vibrateDeviceShort()
-                        }
-                        lastIntervalNotificationTime = newRemaining
+            val startTime = System.currentTimeMillis()
+            val initialTotalRemaining = _uiState.value.totalRemainingSeconds
+
+            while (_uiState.value.totalRemainingSeconds > 0) {
+                delay(500L)
+                val elapsedSeconds = ((System.currentTimeMillis() - startTime) / 1000).toInt()
+                val currentTotalRemaining = maxOf(0, initialTotalRemaining - elapsedSeconds)
+                
+                // 현재 몇 번째 블록인지 계산
+                val elapsedFromSessionStart = totalSecondsAtStart - currentTotalRemaining
+                var accumulatedSeconds = 0
+                var newBlockIndex = 0
+                for ((index, block) in _uiState.value.timeBlocks.withIndex()) {
+                    accumulatedSeconds += block.durationMinutes * 60
+                    if (elapsedFromSessionStart < accumulatedSeconds) {
+                        newBlockIndex = index
+                        break
                     }
-
-                    _uiState.update { it.copy(remainingSeconds = newRemaining) }
                 }
 
-                // 블록 종료 및 자동 다음 블록 전환
-                val nextIndex = currentIndex + 1
-                val nextBlock = currentState.timeBlocks.getOrNull(nextIndex)
-                
-                onBlockFinished(
-                    showNotification = true,
-                    finishedType = currentBlock.type,
-                    nextType = nextBlock?.type
-                )
-
-                if (nextBlock != null) {
-                    _uiState.update { it.copy(
-                        currentBlockIndex = nextIndex,
-                        remainingSeconds = nextBlock.durationMinutes * 60
-                    ) }
-                    // 다음 블록으로 루프 계속 진행
-                } else {
-                    // 모든 블록 끝
-                    _uiState.update { it.copy(isRunning = false) }
-                    break
+                // 블록이 전환될 때 알림 발생
+                if (newBlockIndex != _uiState.value.currentBlockIndex) {
+                    val prevBlock = _uiState.value.timeBlocks[_uiState.value.currentBlockIndex]
+                    val nextBlock = _uiState.value.timeBlocks.getOrNull(newBlockIndex)
+                    
+                    onBlockTransition(prevBlock.type, nextBlock?.type)
+                    
+                    _uiState.update { it.copy(currentBlockIndex = newBlockIndex) }
                 }
+
+                // 현재 블록 내 남은 시간 (알림 간격용)
+                val currentBlockLimit = _uiState.value.timeBlocks.take(newBlockIndex + 1).sumOf { it.durationMinutes * 60 }
+                val remainingInBlock = currentBlockLimit - elapsedFromSessionStart
+
+                // 중간 알림 (interval) 처리
+                val interval = _uiState.value.notificationInterval
+                if (interval > 0 && remainingInBlock > 0 && remainingInBlock % (interval * 60) == 0) {
+                    if (_uiState.value.vibrationEnabled) {
+                        notificationHelper.vibrateDeviceShort()
+                    }
+                }
+
+                _uiState.update { it.copy(
+                    totalRemainingSeconds = currentTotalRemaining,
+                    remainingSeconds = remainingInBlock
+                ) }
+            }
+
+            // 전체 세션 종료
+            _uiState.update { it.copy(isRunning = false, totalRemainingSeconds = 0) }
+            onSessionFinished()
+        }
+    }
+
+    private fun onBlockTransition(finishedType: BlockType, nextType: BlockType?) {
+        notificationHelper.showBlockTransitionNotification(
+            finishedType = finishedType,
+            nextType = nextType,
+            vibrationEnabled = _uiState.value.vibrationEnabled
+        )
+        
+        // 통계 저장 등 기존 로직 수행
+        if (finishedType == BlockType.FOCUS) {
+            val duration = _uiState.value.timeBlocks[_uiState.value.currentBlockIndex].durationMinutes
+            viewModelScope.launch {
+                statsRepository.addFocusMinutes(duration)
             }
         }
+    }
+
+    private fun onSessionFinished() {
+        // 모든 블록이 끝났을 때의 처리
+        _uiState.update { it.copy(
+            timeBlocks = it.timeBlocks.map { b -> b.copy(isCompleted = true) }
+        ) }
     }
 
     private fun pauseTimer() {
@@ -305,6 +345,7 @@ class SchedulerViewModel(
 data class SchedulerUiState(
     val timeBlocks: List<TimeBlock> = emptyList(),
     val tasks: List<Task> = emptyList(),
+    val selectedTaskId: String? = null, // 선택된 할 일 ID (String으로 수정)
     val currentBlockIndex: Int = 0,
     val remainingSeconds: Int = 0,
     val totalRemainingSeconds: Int = 0,

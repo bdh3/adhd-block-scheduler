@@ -2,9 +2,9 @@ package com.example.adhdblockscheduler.ui.screen
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -18,8 +18,8 @@ import androidx.navigation.compose.rememberNavController
 import com.example.adhdblockscheduler.ui.viewmodel.SchedulerViewModel
 
 sealed class Screen(val route: String, val label: String, val icon: ImageVector) {
-    object Home : Screen("home", "홈", Icons.Default.Home)
-    object Stats : Screen("stats", "통계", Icons.Default.Star)
+    object Calendar : Screen("calendar", "캘린더", Icons.Default.DateRange)
+    object Timer : Screen("timer", "타이머", Icons.Default.PlayArrow)
     object Settings : Screen("settings", "설정", Icons.Default.Settings)
 }
 
@@ -27,8 +27,8 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
 fun MainScreen(viewModel: SchedulerViewModel) {
     val navController = rememberNavController()
     val items = listOf(
-        Screen.Home,
-        Screen.Stats,
+        Screen.Calendar,
+        Screen.Timer,
         Screen.Settings
     )
 
@@ -58,12 +58,18 @@ fun MainScreen(viewModel: SchedulerViewModel) {
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = Screen.Home.route,
+            startDestination = Screen.Calendar.route,
             modifier = Modifier.padding(innerPadding)
         ) {
-            composable(Screen.Home.route) { SchedulerScreen(viewModel) }
-            composable(Screen.Stats.route) { StatsScreen(viewModel) }
+            composable(Screen.Calendar.route) { 
+                // 임시로 StatsScreen 대신 CalendarScreen이 들어갈 자리
+                CalendarScreen(viewModel, onNavigateToTimer = {
+                    navController.navigate(Screen.Timer.route)
+                }) 
+            }
+            composable(Screen.Timer.route) { SchedulerScreen(viewModel) }
             composable(Screen.Settings.route) { SettingsScreen(viewModel) }
         }
     }
 }
+

@@ -8,42 +8,53 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.CreationExtras
 import com.example.adhdblockscheduler.ADHDBlockSchedulerApplication
 import com.example.adhdblockscheduler.data.prefs.SettingsRepository
+import com.example.adhdblockscheduler.data.repository.ScheduleRepository
 import com.example.adhdblockscheduler.data.repository.StatsRepository
 import com.example.adhdblockscheduler.data.repository.TaskRepository
 import com.example.adhdblockscheduler.model.BlockType
+import com.example.adhdblockscheduler.model.ScheduleBlock
 import com.example.adhdblockscheduler.model.Task
 import com.example.adhdblockscheduler.model.TimeBlock
 import com.example.adhdblockscheduler.util.CalendarHelper
 import com.example.adhdblockscheduler.util.NotificationHelper
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.util.Calendar
 
 class SchedulerViewModel(
     private val app: Application,
     private val repository: TaskRepository,
     private val statsRepository: StatsRepository,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val scheduleRepository: ScheduleRepository
 ) : AndroidViewModel(app) {
     
     private val notificationHelper = NotificationHelper(app)
     private val _uiState = MutableStateFlow(SchedulerUiState())
     
+    private val _selectedDate = MutableStateFlow(System.currentTimeMillis())
+    val selectedDate: StateFlow<Long> = _selectedDate.asStateFlow()
+
+    @OptIn(ExperimentalCoroutinesApi::class)
     val uiState: StateFlow<SchedulerUiState> = combine(
         _uiState,
         repository.allTasks,
         settingsRepository.calendarSyncEnabled,
         settingsRepository.vibrationEnabled,
         settingsRepository.blocksPerHour,
-        settingsRepository.restMinutes
-    ) { Array ->
-        val state = Array[0] as SchedulerUiState
-        val tasks = Array[1] as List<Task>
-        val calendarSync = Array[2] as Boolean
-        val vibration = Array[3] as Boolean
-        val blocksPerHour = Array[4] as Int
-        val restMin = Array[5] as Int
+        settingsRepository.restMinutes,
+        _selectedDate.flatMapLatest { scheduleRepository.getSchedulesForDay(it) }
+    ) { params ->
+        val state = params[0] as SchedulerUiState
+        val tasks = params[1] as List<Task>
+        val calendarSync = params[2] as Boolean
+        val vibration = params[3] as Boolean
+        val blocksPerHour = params[4] as Int
+        val restMin = params[5] as Int
+        val dailySchedules = params[6] as List<ScheduleBlock>
 
         // 전체 남은 시간 계산
         val currentBlockRemaining = state.remainingSeconds
@@ -58,7 +69,8 @@ class SchedulerViewModel(
             vibrationEnabled = vibration,
             blocksPerHour = blocksPerHour,
             restMinutes = restMin,
-            totalRemainingSeconds = totalRemaining
+            totalRemainingSeconds = totalRemaining,
+            dailySchedules = dailySchedules
         )
     }.stateIn(
         scope = viewModelScope,
@@ -81,23 +93,22 @@ class SchedulerViewModel(
         }
     }
 
-    private fun generateDefaultBlocks(blocksPerHour: Int, restMinutes: Int) {
-        val totalMinutes = 60
+    private fun generateDefaultBlocks(blocksPerHour: Int, restMinutes: Int, totalMinutes: Int = 60) {
         val focusMinutes = totalMinutes - restMinutes
-        val blockDuration = 60 / blocksPerHour // 1시간을 쪼개는 단위
+        val blockDuration = if (blocksPerHour > 0) totalMinutes / blocksPerHour else 15 // 기본 15분
         
         val blocks = mutableListOf<TimeBlock>()
         var currentTime = System.currentTimeMillis()
 
         // 1. 집중 블록 생성 (쪼개기 단위 기준)
-        val focusBlocksCount = focusMinutes / blockDuration
+        val focusBlocksCount = if (blockDuration > 0) focusMinutes / blockDuration else 0
         for (i in 0 until focusBlocksCount) {
             blocks.add(TimeBlock(startTime = currentTime, durationMinutes = blockDuration, type = BlockType.FOCUS))
             currentTime += blockDuration * 60 * 1000L
         }
         
         // 집중 시간의 나머지 자투리 시간이 있다면 추가
-        val focusRemainder = focusMinutes % blockDuration
+        val focusRemainder = if (blockDuration > 0) focusMinutes % blockDuration else focusMinutes
         if (focusRemainder > 0) {
             blocks.add(TimeBlock(startTime = currentTime, durationMinutes = focusRemainder, type = BlockType.FOCUS))
             currentTime += focusRemainder * 60 * 1000L
@@ -112,8 +123,93 @@ class SchedulerViewModel(
             timeBlocks = blocks,
             currentBlockIndex = 0,
             remainingSeconds = if (blocks.isNotEmpty()) blocks[0].durationMinutes * 60 else 0,
-            totalRemainingSeconds = blocks.sumOf { it.durationMinutes * 60 }
+            totalRemainingSeconds = blocks.sumOf { it.durationMinutes * 60 },
+            sessionTotalMinutes = totalMinutes
         ) }
+    }
+
+    fun addSchedule(taskTitle: String, durationMinutes: Int, hourOfDay: Int) {
+        viewModelScope.launch {
+            val startTime = Calendar.getInstance().apply {
+                timeInMillis = _selectedDate.value
+                set(Calendar.HOUR_OF_DAY, hourOfDay)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }.timeInMillis
+
+            val newSchedule = ScheduleBlock(
+                taskTitle = taskTitle,
+                startTimeMillis = startTime,
+                durationMinutes = durationMinutes
+            )
+            scheduleRepository.insertSchedule(newSchedule)
+        }
+    }
+
+    fun loadScheduledSession(schedule: ScheduleBlock) {
+        viewModelScope.launch {
+            // 기존 할 일이 있는지 확인하거나 새로 생성
+            val existingTasks = repository.allTasks.first()
+            val existingTask = existingTasks.find { it.title == schedule.taskTitle }
+            val taskId = existingTask?.id ?: run {
+                val newTask = Task(title = schedule.taskTitle)
+                repository.insertTask(newTask)
+                newTask.id
+            }
+            
+            selectTask(taskId)
+            
+            // 설정된 비율에 따라 블록 생성
+            val currentPerHour = _uiState.value.blocksPerHour
+            val currentRest = _uiState.value.restMinutes
+            generateDefaultBlocks(currentPerHour, currentRest, schedule.durationMinutes)
+            
+            // 스케줄 ID 저장 (완료 시 업데이트를 위해)
+            _uiState.update { it.copy(currentScheduleId = schedule.id) }
+        }
+    }
+
+    fun startNewSession(taskTitle: String, totalMinutes: Int, hourOfDay: Int? = null) {
+        viewModelScope.launch {
+            // 1. 스케줄 블록 생성 및 DB 저장
+            val startTime = if (hourOfDay != null) {
+                Calendar.getInstance().apply {
+                    timeInMillis = _selectedDate.value
+                    set(Calendar.HOUR_OF_DAY, hourOfDay)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }.timeInMillis
+            } else {
+                System.currentTimeMillis()
+            }
+
+            val newSchedule = ScheduleBlock(
+                taskTitle = taskTitle,
+                startTimeMillis = startTime,
+                durationMinutes = totalMinutes
+            )
+            scheduleRepository.insertSchedule(newSchedule)
+
+            // 2. 할 일 추가 및 선택
+            val newTask = Task(title = taskTitle)
+            repository.insertTask(newTask)
+            selectTask(newTask.id)
+            
+            // 3. 설정된 비율에 따라 블록 생성
+            val currentPerHour = _uiState.value.blocksPerHour
+            val currentRest = _uiState.value.restMinutes
+            generateDefaultBlocks(currentPerHour, currentRest, totalMinutes)
+            
+            // 4. 스케줄 ID 저장 및 타이머 시작
+            _uiState.update { it.copy(currentScheduleId = newSchedule.id) }
+            startTimer()
+        }
+    }
+
+    fun selectDate(dateMillis: Long) {
+        _selectedDate.value = dateMillis
     }
 
     fun selectTask(taskId: String) {
@@ -208,9 +304,19 @@ class SchedulerViewModel(
 
     private fun onSessionFinished() {
         // 모든 블록이 끝났을 때의 처리
+        val currentScheduleId = _uiState.value.currentScheduleId
         _uiState.update { it.copy(
             timeBlocks = it.timeBlocks.map { b -> b.copy(isCompleted = true) }
         ) }
+        
+        if (currentScheduleId != null) {
+            viewModelScope.launch {
+                val schedule = scheduleRepository.getScheduleById(currentScheduleId)
+                if (schedule != null) {
+                    scheduleRepository.updateSchedule(schedule.copy(isCompleted = true))
+                }
+            }
+        }
     }
 
     private fun pauseTimer() {
@@ -338,7 +444,8 @@ class SchedulerViewModel(
                     application,
                     application.taskRepository,
                     application.statsRepository,
-                    application.settingsRepository
+                    application.settingsRepository,
+                    application.scheduleRepository
                 ) as T
             }
         }
@@ -347,14 +454,17 @@ class SchedulerViewModel(
 
 data class SchedulerUiState(
     val timeBlocks: List<TimeBlock> = emptyList(),
+    val dailySchedules: List<ScheduleBlock> = emptyList(),
     val tasks: List<Task> = emptyList(),
     val selectedTaskId: String? = null, // 선택된 할 일 ID (String으로 수정)
     val currentBlockIndex: Int = 0,
     val remainingSeconds: Int = 0,
     val totalRemainingSeconds: Int = 0,
+    val sessionTotalMinutes: Int = 60,
     val isRunning: Boolean = false,
     val calendarSyncEnabled: Boolean = false,
     val vibrationEnabled: Boolean = true,
     val blocksPerHour: Int = 4,
-    val restMinutes: Int = 15
+    val restMinutes: Int = 15,
+    val currentScheduleId: String? = null
 )

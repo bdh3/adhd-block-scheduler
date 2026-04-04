@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<backup-rules>
+    <full-backup-content>
+        <exclude domain="database" path="block_timer.db" />
+        <exclude domain="sharedpref" path="timer_settings.xml" />
+    </full-backup-content>
+</backup-rules>

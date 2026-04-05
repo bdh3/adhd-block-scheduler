@@ -70,19 +70,20 @@ class SchedulerViewModel(
             isBound = true
 
             viewModelScope.launch {
-                timerService?.remainingSeconds?.collect { seconds ->
+                timerService?.totalRemainingSeconds?.collect { seconds ->
                     _uiState.update { it.copy(totalRemainingSeconds = seconds) }
-                    
-                    val interval = _uiState.value.activeSessionInterval * 60
-                    if (interval > 0) {
-                        val currentIdx = (_uiState.value.sessionTotalMinutes * 60 - seconds - 1).coerceAtLeast(0) / interval
-                        val blockRemaining = seconds % interval
-                        
-                        _uiState.update { it.copy(
-                            currentBlockIndex = currentIdx.coerceAtMost(it.timeBlocks.size - 1),
-                            remainingSeconds = if (seconds > 0 && blockRemaining == 0) interval else blockRemaining
-                        ) }
-                    }
+                }
+            }
+
+            viewModelScope.launch {
+                timerService?.remainingSeconds?.collect { seconds ->
+                    _uiState.update { it.copy(remainingSeconds = seconds) }
+                }
+            }
+
+            viewModelScope.launch {
+                timerService?.currentBlockIndex?.collect { index ->
+                    _uiState.update { it.copy(currentBlockIndex = index) }
                 }
             }
 
@@ -361,8 +362,24 @@ class SchedulerViewModel(
         if (state.totalRemainingSeconds <= 0) {
             val totalSeconds = state.sessionTotalMinutes * 60
             _uiState.update { it.copy(totalRemainingSeconds = totalSeconds) }
+            timerService?.setTimerConfig(
+                interval = state.activeSessionInterval,
+                totalSec = state.sessionTotalMinutes * 60,
+                title = state.tasks.find { it.id == state.selectedTaskId }?.title ?: "작업",
+                vibrate = state.vibrationEnabled,
+                onTransition = { title, elapsed, finished -> onBlockTransition(title, elapsed, finished) },
+                onFinished = { onSessionFinished() }
+            )
             timerService?.startTimer(totalSeconds)
         } else {
+            timerService?.setTimerConfig(
+                interval = state.activeSessionInterval,
+                totalSec = state.sessionTotalMinutes * 60,
+                title = state.tasks.find { it.id == state.selectedTaskId }?.title ?: "작업",
+                vibrate = state.vibrationEnabled,
+                onTransition = { title, elapsed, finished -> onBlockTransition(title, elapsed, finished) },
+                onFinished = { onSessionFinished() }
+            )
             timerService?.startTimer(state.totalRemainingSeconds)
         }
     }
@@ -386,6 +403,14 @@ class SchedulerViewModel(
                 remainingSeconds = intervalSeconds,
                 totalRemainingSeconds = newTotalRemainingSeconds
             ) }
+            timerService?.setTimerConfig(
+                interval = state.activeSessionInterval,
+                totalSec = state.sessionTotalMinutes * 60,
+                title = state.tasks.find { it.id == state.selectedTaskId }?.title ?: "작업",
+                vibrate = state.vibrationEnabled,
+                onTransition = { title, elapsed, finished -> onBlockTransition(title, elapsed, finished) },
+                onFinished = { onSessionFinished() }
+            )
             timerService?.startTimer(newTotalRemainingSeconds)
         } else {
             onSessionFinished()

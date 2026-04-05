@@ -123,7 +123,7 @@ class TimerService : Service() {
                 _totalRemainingSeconds.value = currentTotalRemaining
                 
                 val sessionElapsedSeconds = totalSecondsAtStart - currentTotalRemaining
-                val newBlockIndex = sessionElapsedSeconds / intervalSeconds
+                val newBlockIndex = (sessionElapsedSeconds / intervalSeconds).coerceAtMost((totalSecondsAtStart - 1) / intervalSeconds)
                 
                 if (newBlockIndex != _currentBlockIndex.value && currentTotalRemaining > 0) {
                     _currentBlockIndex.value = newBlockIndex
@@ -134,10 +134,11 @@ class TimerService : Service() {
             }
 
             // 완료 처리
-            _isRunning.value = false
             _totalRemainingSeconds.value = 0
+            _remainingSeconds.value = 0
+            _isRunning.value = false
             
-            delay(1000L)
+            delay(500L) // UI 업데이트 대기
             onFinished()
             releaseWakeLock()
             stopForeground(true)

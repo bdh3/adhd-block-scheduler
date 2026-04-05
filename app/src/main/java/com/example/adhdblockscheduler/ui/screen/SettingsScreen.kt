@@ -56,77 +56,89 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                 .padding(padding)
                 .padding(16.dp)
         ) {
-            Text("알림 설정", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-            
-            ListItem(
-                headlineContent = { Text("알림 단위") },
-                supportingContent = { Text("작업 중 ${alarmInterval}분마다 알림을 줍니다.") },
-                trailingContent = {
-                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                        Text("${alarmInterval}분")
-                        Slider(
-                            value = when(alarmInterval) {
-                                5 -> 0f
-                                15 -> 1f
-                                30 -> 2f
-                                else -> 1f
-                            },
-                            onValueChange = { 
-                                alarmInterval = when(it.toInt()) {
-                                    0 -> 5
-                                    1 -> 15
-                                    2 -> 30
-                                    else -> 15
-                                }
-                            },
-                            valueRange = 0f..2f,
-                            steps = 1,
-                            modifier = Modifier.width(120.dp)
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "🚀 단일 작업 기본 전략",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "계획 없이 바로 타이머를 시작할 때 적용되는 기본값입니다. (개별 작업 생성 시 변경 가능)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // 전략 프리셋 버튼
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilterChip(
+                            selected = restMinutes == 0,
+                            onClick = { alarmInterval = 15; restMinutes = 0 },
+                            label = { Text("연속 집중") }
+                        )
+                        FilterChip(
+                            selected = alarmInterval == 25 && restMinutes == 5,
+                            onClick = { alarmInterval = 25; restMinutes = 5 },
+                            label = { Text("25/5 (뽀모도로)") }
+                        )
+                        FilterChip(
+                            selected = alarmInterval == 50 && restMinutes == 10,
+                            onClick = { alarmInterval = 50; restMinutes = 10 },
+                            label = { Text("50/10 (고집중)") }
                         )
                     }
-                }
-            )
 
-            ListItem(
-                headlineContent = { Text("휴식 시간") },
-                supportingContent = { Text(if (restMinutes > 0) "집중 블록 사이마다 ${restMinutes}분씩 휴식합니다." else "휴식 없이 계속 집중합니다.") },
-                trailingContent = {
+                    Spacer(modifier = Modifier.height(12.dp))
+
                     Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                        Text(if (restMinutes > 0) "${restMinutes}분" else "끄기")
+                        Text("집중: ${alarmInterval}분", modifier = Modifier.width(80.dp), style = MaterialTheme.typography.bodyMedium)
                         Slider(
-                            value = when(restMinutes) {
-                                0 -> 0f
-                                5 -> 1f
-                                10 -> 2f
-                                15 -> 3f
-                                else -> 0f
-                            },
+                            value = when(alarmInterval) { 15 -> 0f; 25 -> 1f; 30 -> 2f; 45 -> 3f; 50 -> 4f; 60 -> 5f; else -> 0f },
                             onValueChange = { 
-                                restMinutes = when(it.toInt()) {
-                                    0 -> 0
-                                    1 -> 5
-                                    2 -> 10
-                                    3 -> 15
-                                    else -> 0
-                                }
+                                alarmInterval = when(it.toInt()) { 0 -> 15; 1 -> 25; 2 -> 30; 3 -> 45; 4 -> 50; 5 -> 60; else -> 15 }
+                            },
+                            valueRange = 0f..5f,
+                            steps = 4,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        Text("휴식: ${restMinutes}분", modifier = Modifier.width(80.dp), style = MaterialTheme.typography.bodyMedium)
+                        Slider(
+                            value = when(restMinutes) { 0 -> 0f; 5 -> 1f; 10 -> 2f; 15 -> 3f; else -> 0f },
+                            onValueChange = { 
+                                restMinutes = when(it.toInt()) { 0 -> 0; 1 -> 5; 2 -> 10; 3 -> 15; else -> 0 }
                             },
                             valueRange = 0f..3f,
                             steps = 2,
-                            modifier = Modifier.width(120.dp)
+                            modifier = Modifier.weight(1f)
                         )
                     }
                 }
-            )
+            }
 
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text("알림 및 시스템", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+            
             ListItem(
                 headlineContent = { Text("진동 알림") },
-                supportingContent = { Text("알림 발생 시 진동을 켭니다.") },
+                supportingContent = { Text("구간 전환 시 진동을 켭니다.") },
                 trailingContent = {
                     Switch(
                         checked = vibrationEnabled,
-                        onCheckedChange = { 
-                            vibrationEnabled = it
-                        }
+                        onCheckedChange = { vibrationEnabled = it }
                     )
                 }
             )

@@ -137,6 +137,7 @@ fun CalendarScreen(
     if (showAddTaskDialog) {
         var taskTitle by remember { mutableStateOf("") }
         var isCycleMode by remember { mutableStateOf(uiState.restMinutes > 0) }
+        var localInterval by remember { mutableIntStateOf(uiState.alarmIntervalMinutes) }
         var localRestMinutes by remember { mutableIntStateOf(if (uiState.restMinutes > 0) uiState.restMinutes else 10) }
 
         AlertDialog(
@@ -162,21 +163,47 @@ fun CalendarScreen(
                         FilterChip(
                             selected = !isCycleMode,
                             onClick = { isCycleMode = false },
-                            label = { Text("연속 집중") },
-                            leadingIcon = if (!isCycleMode) { { Icon(Icons.Default.Check, null, Modifier.size(18.dp)) } } else null
+                            label = { Text("연속 집중") }
                         )
                         FilterChip(
                             selected = isCycleMode,
                             onClick = { isCycleMode = true },
-                            label = { Text("인터벌 사이클") },
-                            leadingIcon = if (isCycleMode) { { Icon(Icons.Default.Check, null, Modifier.size(18.dp)) } } else null
+                            label = { Text("인터벌 사이클") }
                         )
                     }
 
                     if (isCycleMode) {
                         Spacer(Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            SuggestionChip(
+                                onClick = { localInterval = 25; localRestMinutes = 5 },
+                                label = { Text("25/5 (뽀모도로)", fontSize = 11.sp) }
+                            )
+                            SuggestionChip(
+                                onClick = { localInterval = 50; localRestMinutes = 10 },
+                                label = { Text("50/10 (고집중)", fontSize = 11.sp) }
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+                    
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("집중: ${localInterval}분", modifier = Modifier.width(70.dp), style = MaterialTheme.typography.bodyMedium)
+                        Slider(
+                            value = when(localInterval) { 15 -> 0f; 25 -> 1f; 30 -> 2f; 45 -> 3f; 50 -> 4f; 60 -> 5f; else -> 0f },
+                            onValueChange = { 
+                                localInterval = when(it.toInt()) { 0 -> 15; 1 -> 25; 2 -> 30; 3 -> 45; 4 -> 50; 5 -> 60; else -> 15 }
+                            },
+                            valueRange = 0f..5f,
+                            steps = 4,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    if (isCycleMode) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("휴식: ${localRestMinutes}분", style = MaterialTheme.typography.bodyMedium)
+                            Text("휴식: ${localRestMinutes}분", modifier = Modifier.width(70.dp), style = MaterialTheme.typography.bodyMedium)
                             Slider(
                                 value = when(localRestMinutes) { 5 -> 0f; 10 -> 1f; 15 -> 2f; else -> 1f },
                                 onValueChange = { 
@@ -184,7 +211,7 @@ fun CalendarScreen(
                                 },
                                 valueRange = 0f..2f,
                                 steps = 1,
-                                modifier = Modifier.padding(horizontal = 8.dp)
+                                modifier = Modifier.weight(1f)
                             )
                         }
                     }
@@ -201,7 +228,6 @@ fun CalendarScreen(
                             .background(MaterialTheme.colorScheme.surfaceVariant)
                     ) {
                         val totalMin = uiState.selectedBlocks.size * 15
-                        val interval = uiState.alarmIntervalMinutes
                         val rest = if (isCycleMode) localRestMinutes else 0
                         
                         if (rest <= 0) {
@@ -209,12 +235,12 @@ fun CalendarScreen(
                         } else {
                             var current = 0
                             while (current < totalMin) {
-                                val fWidth = Math.min(interval, totalMin - current).toFloat() / totalMin
-                                Box(Modifier.weight(fWidth).fillMaxHeight().background(MaterialTheme.colorScheme.primary))
-                                current += interval
+                                val fWidth = Math.min(localInterval, totalMin - current).toFloat() / totalMin
+                                if (fWidth > 0) Box(Modifier.weight(fWidth).fillMaxHeight().background(MaterialTheme.colorScheme.primary))
+                                current += localInterval
                                 if (current < totalMin) {
                                     val rWidth = Math.min(rest, totalMin - current).toFloat() / totalMin
-                                    Box(Modifier.weight(rWidth).fillMaxHeight().background(MaterialTheme.colorScheme.tertiary))
+                                    if (rWidth > 0) Box(Modifier.weight(rWidth).fillMaxHeight().background(MaterialTheme.colorScheme.tertiary))
                                     current += rest
                                 }
                             }
@@ -229,21 +255,13 @@ fun CalendarScreen(
                         val firstBlock = uiState.selectedBlocks.minOrNull() ?: System.currentTimeMillis()
                         val calendar = Calendar.getInstance().apply { timeInMillis = firstBlock }
                         
-                        // 설정값 업데이트 (사이클 모드 여부에 따라)
-                        viewModel.saveSettings(
-                            interval = uiState.alarmIntervalMinutes,
-                            rest = if (isCycleMode) localRestMinutes else 0,
-                            vibration = uiState.vibrationEnabled,
-                            calendarSync = false
-                        )
-                        
                         viewModel.addSchedule(
                             taskTitle = taskTitle.ifBlank { "새 작업" },
                             durationMinutes = duration,
                             startTimeHour = calendar.get(Calendar.HOUR_OF_DAY),
                             startTimeMinute = calendar.get(Calendar.MINUTE),
                             startNewSession = true,
-                            intervalMinutes = uiState.alarmIntervalMinutes,
+                            intervalMinutes = localInterval,
                             restMinutes = if (isCycleMode) localRestMinutes else 0
                         )
                         viewModel.clearSelectedBlocks()

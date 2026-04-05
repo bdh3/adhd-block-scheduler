@@ -136,26 +136,90 @@ fun CalendarScreen(
 
     if (showAddTaskDialog) {
         var taskTitle by remember { mutableStateOf("") }
-        
+        var isCycleMode by remember { mutableStateOf(uiState.restMinutes > 0) }
+        var localRestMinutes by remember { mutableIntStateOf(if (uiState.restMinutes > 0) uiState.restMinutes else 10) }
+
         AlertDialog(
             onDismissRequest = { showAddTaskDialog = false },
             title = { Text("세션 생성") },
             text = {
                 Column {
-                    Text("${uiState.selectedBlocks.size * 15}분 동안 진행할 작업을 입력하세요.")
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = "알림 단위: ${uiState.alarmIntervalMinutes}분 (설정에서 변경 가능)",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.secondary
-                    )
-                    Spacer(Modifier.height(8.dp))
                     TextField(
                         value = taskTitle,
                         onValueChange = { taskTitle = it },
-                        label = { Text("작업명") },
-                        modifier = Modifier.fillMaxWidth()
+                        label = { Text("어떤 작업을 하시나요?") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
                     )
+                    
+                    Spacer(Modifier.height(16.dp))
+                    
+                    Text("작업 모드", style = MaterialTheme.typography.labelLarge)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilterChip(
+                            selected = !isCycleMode,
+                            onClick = { isCycleMode = false },
+                            label = { Text("연속 집중") },
+                            leadingIcon = if (!isCycleMode) { { Icon(Icons.Default.Check, null, Modifier.size(18.dp)) } } else null
+                        )
+                        FilterChip(
+                            selected = isCycleMode,
+                            onClick = { isCycleMode = true },
+                            label = { Text("인터벌 사이클") },
+                            leadingIcon = if (isCycleMode) { { Icon(Icons.Default.Check, null, Modifier.size(18.dp)) } } else null
+                        )
+                    }
+
+                    if (isCycleMode) {
+                        Spacer(Modifier.height(8.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("휴식: ${localRestMinutes}분", style = MaterialTheme.typography.bodyMedium)
+                            Slider(
+                                value = when(localRestMinutes) { 5 -> 0f; 10 -> 1f; 15 -> 2f; else -> 1f },
+                                onValueChange = { 
+                                    localRestMinutes = when(it.toInt()) { 0 -> 5; 1 -> 10; 2 -> 15; else -> 10 }
+                                },
+                                valueRange = 0f..2f,
+                                steps = 1,
+                                modifier = Modifier.padding(horizontal = 8.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+                    
+                    Text("블록 구성 미리보기 (${uiState.selectedBlocks.size * 15}분)", style = MaterialTheme.typography.labelSmall)
+                    Spacer(Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(12.dp)
+                            .clip(MaterialTheme.shapes.extraSmall)
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                    ) {
+                        val totalMin = uiState.selectedBlocks.size * 15
+                        val interval = uiState.alarmIntervalMinutes
+                        val rest = if (isCycleMode) localRestMinutes else 0
+                        
+                        if (rest <= 0) {
+                            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.primary))
+                        } else {
+                            var current = 0
+                            while (current < totalMin) {
+                                val fWidth = Math.min(interval, totalMin - current).toFloat() / totalMin
+                                Box(Modifier.weight(fWidth).fillMaxHeight().background(MaterialTheme.colorScheme.primary))
+                                current += interval
+                                if (current < totalMin) {
+                                    val rWidth = Math.min(rest, totalMin - current).toFloat() / totalMin
+                                    Box(Modifier.weight(rWidth).fillMaxHeight().background(MaterialTheme.colorScheme.tertiary))
+                                    current += rest
+                                }
+                            }
+                        }
+                    }
                 }
             },
             confirmButton = {
@@ -165,19 +229,29 @@ fun CalendarScreen(
                         val firstBlock = uiState.selectedBlocks.minOrNull() ?: System.currentTimeMillis()
                         val calendar = Calendar.getInstance().apply { timeInMillis = firstBlock }
                         
+                        // 설정값 업데이트 (사이클 모드 여부에 따라)
+                        viewModel.saveSettings(
+                            interval = uiState.alarmIntervalMinutes,
+                            rest = if (isCycleMode) localRestMinutes else 0,
+                            vibration = uiState.vibrationEnabled,
+                            calendarSync = false
+                        )
+                        
                         viewModel.addSchedule(
                             taskTitle = taskTitle.ifBlank { "새 작업" },
                             durationMinutes = duration,
                             startTimeHour = calendar.get(Calendar.HOUR_OF_DAY),
                             startTimeMinute = calendar.get(Calendar.MINUTE),
-                            startNewSession = true
+                            startNewSession = true,
+                            intervalMinutes = uiState.alarmIntervalMinutes,
+                            restMinutes = if (isCycleMode) localRestMinutes else 0
                         )
                         viewModel.clearSelectedBlocks()
                         showAddTaskDialog = false
-                        onNavigateToTimer() // 생성 후 타이머로 이동 (요구사항 1번)
+                        onNavigateToTimer()
                     }
                 ) {
-                    Text("생성")
+                    Text("시작하기")
                 }
             },
             dismissButton = {

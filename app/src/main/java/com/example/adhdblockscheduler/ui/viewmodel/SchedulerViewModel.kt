@@ -292,7 +292,15 @@ class SchedulerViewModel(
         _uiState.update { it.copy(timeBlocks = blocks) }
     }
 
-    fun addSchedule(taskTitle: String, startTimeHour: Int, startTimeMinute: Int, durationMinutes: Int, startNewSession: Boolean = false) {
+    fun addSchedule(
+        taskTitle: String, 
+        startTimeHour: Int, 
+        startTimeMinute: Int, 
+        durationMinutes: Int, 
+        startNewSession: Boolean = false,
+        intervalMinutes: Int = _uiState.value.alarmIntervalMinutes,
+        restMinutes: Int = _uiState.value.restMinutes
+    ) {
         viewModelScope.launch {
             val startTime = Calendar.getInstance().apply {
                 timeInMillis = _selectedDate.value
@@ -305,7 +313,9 @@ class SchedulerViewModel(
             val schedule = ScheduleBlock(
                 taskTitle = taskTitle,
                 startTimeMillis = startTime,
-                durationMinutes = durationMinutes
+                durationMinutes = durationMinutes,
+                intervalMinutes = intervalMinutes,
+                restMinutes = restMinutes
             )
             val id = scheduleRepository.insertSchedule(schedule)
             if (startNewSession) {
@@ -317,17 +327,20 @@ class SchedulerViewModel(
     fun loadScheduledSession(schedule: ScheduleBlock) {
         if (_uiState.value.isRunning) return
         
-        val currentInterval = _uiState.value.alarmIntervalMinutes
+        val taskInterval = schedule.intervalMinutes
+        val taskRest = schedule.restMinutes
+        
         _uiState.update { it.copy(
             selectedTaskId = "sched_${schedule.id}",
             sessionTotalMinutes = schedule.durationMinutes,
             currentScheduleId = schedule.id,
-            activeSessionInterval = currentInterval,
-            remainingSeconds = currentInterval * 60,
+            activeSessionInterval = taskInterval,
+            restMinutes = taskRest,
+            remainingSeconds = taskInterval * 60,
             totalRemainingSeconds = schedule.durationMinutes * 60
         ) }
         
-        generateDefaultBlocks(currentInterval, schedule.durationMinutes)
+        generateDefaultBlocks(taskInterval, schedule.durationMinutes)
     }
 
     fun startNewSession(taskTitle: String, totalMinutes: Int, hourOfDay: Int? = null) {

@@ -12,5 +12,7 @@ data class ScheduleBlock(
     val startTimeMillis: Long,
     val durationMinutes: Int,
     val isCompleted: Boolean = false,
-    val color: Int = 0 // Optional: for UI coloring
+    val color: Int = 0,
+    val intervalMinutes: Int = 15,
+    val restMinutes: Int = 0
 )

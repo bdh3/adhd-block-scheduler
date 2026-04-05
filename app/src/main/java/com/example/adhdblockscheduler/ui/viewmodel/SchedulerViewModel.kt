@@ -466,6 +466,7 @@ class SchedulerViewModel(
             
             timerService?.setTimerConfig(
                 interval = currentInterval,
+                rest = state.restMinutes,
                 totalSec = totalSeconds,
                 title = state.tasks.find { it.id == state.selectedTaskId }?.title ?: "작업",
                 vibrate = state.vibrationEnabled,

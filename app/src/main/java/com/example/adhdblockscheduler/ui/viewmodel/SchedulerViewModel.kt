@@ -464,6 +464,7 @@ class SchedulerViewModel(
             // 재개 시에는 기존 박제된 activeSessionInterval 유지
             timerService?.setTimerConfig(
                 interval = state.activeSessionInterval,
+                rest = state.restMinutes,
                 totalSec = state.sessionTotalMinutes * 60,
                 title = state.tasks.find { it.id == state.selectedTaskId }?.title ?: "작업",
                 vibrate = state.vibrationEnabled,
@@ -495,6 +496,7 @@ class SchedulerViewModel(
             ) }
             timerService?.setTimerConfig(
                 interval = state.activeSessionInterval,
+                rest = state.restMinutes,
                 totalSec = state.sessionTotalMinutes * 60,
                 title = state.tasks.find { it.id == state.selectedTaskId }?.title ?: "작업",
                 vibrate = state.vibrationEnabled,

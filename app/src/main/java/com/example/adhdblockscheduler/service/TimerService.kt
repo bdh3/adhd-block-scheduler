@@ -38,6 +38,7 @@ class TimerService : Service() {
 
     // Configuration
     private var alarmIntervalMinutes = 15
+    private var restMinutes = 0
     private var totalSecondsAtStart = 0
     private var taskTitle = "작업"
     private var vibrationEnabled = true
@@ -73,6 +74,7 @@ class TimerService : Service() {
 
     fun setTimerConfig(
         interval: Int,
+        rest: Int,
         totalSec: Int,
         title: String,
         vibrate: Boolean,
@@ -80,6 +82,7 @@ class TimerService : Service() {
         onFinished: () -> Unit
     ) {
         this.alarmIntervalMinutes = interval
+        this.restMinutes = rest
         this.totalSecondsAtStart = totalSec
         this.taskTitle = title
         this.vibrationEnabled = vibrate
@@ -122,15 +125,35 @@ class TimerService : Service() {
                 val currentTotalRemaining = ((remainingMillis + 500) / 1000).toInt()
                 _totalRemainingSeconds.value = currentTotalRemaining
                 
+                // 사이클 기반 인덱스 및 남은 시간 계산 (W: 집중, R: 휴식)
+                val focusSeconds = alarmIntervalMinutes * 60
+                val restSeconds = restMinutes * 60
+                val cycleSeconds = focusSeconds + restSeconds
+                
                 val sessionElapsedSeconds = totalSecondsAtStart - currentTotalRemaining
-                val newBlockIndex = (sessionElapsedSeconds / intervalSeconds).coerceAtMost((totalSecondsAtStart - 1) / intervalSeconds)
+                
+                val (newBlockIndex, currentBlockRemaining) = if (restSeconds <= 0) {
+                    // 기존 모드 (집중만 있음)
+                    val idx = sessionElapsedSeconds / focusSeconds
+                    val rem = focusSeconds - (sessionElapsedSeconds % focusSeconds)
+                    idx to rem
+                } else {
+                    // 사이클 모드 (집중/휴식 교차)
+                    val cycleIdx = sessionElapsedSeconds / cycleSeconds
+                    val offsetInCycle = sessionElapsedSeconds % cycleSeconds
+                    if (offsetInCycle < focusSeconds) {
+                        // 현재 집중 중
+                        (cycleIdx * 2) to (focusSeconds - offsetInCycle)
+                    } else {
+                        // 현재 휴식 중
+                        (cycleIdx * 2 + 1) to (cycleSeconds - offsetInCycle)
+                    }
+                }
                 
                 if (newBlockIndex != _currentBlockIndex.value && currentTotalRemaining > 0) {
                     _currentBlockIndex.value = newBlockIndex
                 }
-
-                val currentBlockRemaining = intervalSeconds - (sessionElapsedSeconds % intervalSeconds)
-                _remainingSeconds.value = if (currentBlockRemaining == 0) intervalSeconds else currentBlockRemaining
+                _remainingSeconds.value = if (currentBlockRemaining == 0) focusSeconds else currentBlockRemaining.toInt()
             }
 
             // 완료 처리
@@ -147,39 +170,46 @@ class TimerService : Service() {
     }
 
     private fun scheduleAllAlarms(initialRemainingSeconds: Int) {
-        stopAllAlarms() // 확실히 비우고 시작
+        stopAllAlarms()
         
-        val intervalSeconds = alarmIntervalMinutes * 60
+        val focusSeconds = alarmIntervalMinutes * 60
+        val restSeconds = restMinutes * 60
+        val cycleSeconds = focusSeconds + restSeconds
         val currentTime = SystemClock.elapsedRealtime()
         
-        // 1. 현재 블록이 끝나기까지 남은 시간 계산
-        val secondsElapsedInCurrentBlock = (totalSecondsAtStart - initialRemainingSeconds) % intervalSeconds
-        val secondsUntilNextBlock = intervalSeconds - secondsElapsedInCurrentBlock
+        var elapsedAtNextAlarm = (totalSecondsAtStart - initialRemainingSeconds).toLong()
         
-        var nextAlarmOffsetSeconds = secondsUntilNextBlock.toLong()
-        // 현재까지 진행된 총 시간 (분 단위)
-        var totalElapsedMinutes = ((totalSecondsAtStart - initialRemainingSeconds + secondsUntilNextBlock) / 60)
+        // 다음 알람 시점들을 순차적으로 계산하여 예약
+        while (true) {
+            val cycleIdx = (elapsedAtNextAlarm / cycleSeconds).toInt()
+            val offsetInCycle = (elapsedAtNextAlarm % cycleSeconds).toInt()
+            
+            val secondsUntilNextBoundary = if (restSeconds <= 0) {
+                focusSeconds - offsetInCycle
+            } else {
+                if (offsetInCycle < focusSeconds) focusSeconds - offsetInCycle
+                else cycleSeconds - offsetInCycle
+            }
+            
+            elapsedAtNextAlarm += secondsUntilNextBoundary
+            if (elapsedAtNextAlarm >= totalSecondsAtStart) break
+            
+            val totalRemainingAtAlarm = (totalSecondsAtStart - elapsedAtNextAlarm).toInt()
+            val nextAlarmTime = currentTime + ((elapsedAtNextAlarm - (totalSecondsAtStart - initialRemainingSeconds)) * 1000L)
 
-        // 2. 중간 알람들 예약 (종료 전까지)
-        while (nextAlarmOffsetSeconds < initialRemainingSeconds) {
             val intent = Intent(this, com.example.adhdblockscheduler.service.TimerAlarmReceiver::class.java).apply {
                 putExtra("taskTitle", taskTitle)
-                putExtra("elapsedMinutes", totalElapsedMinutes)
+                putExtra("elapsedMinutes", (elapsedAtNextAlarm / 60).toInt())
                 putExtra("isFinished", false)
                 putExtra("vibrationEnabled", vibrationEnabled)
             }
             
-            // PendingIntent ID를 totalElapsedMinutes로 설정하여 고유성 확보
             val pendingIntent = PendingIntent.getBroadcast(
-                this, totalElapsedMinutes, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                this, elapsedAtNextAlarm.toInt(), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             
-            val alarmTime = currentTime + (nextAlarmOffsetSeconds * 1000L)
-            alarmManager.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, alarmTime, pendingIntent)
+            alarmManager.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, nextAlarmTime, pendingIntent)
             pendingAlarms.add(pendingIntent)
-            
-            nextAlarmOffsetSeconds += intervalSeconds
-            totalElapsedMinutes += alarmIntervalMinutes
         }
 
         // 3. 최종 종료 알람 예약 (남은 시간이 0보다 클 때만)

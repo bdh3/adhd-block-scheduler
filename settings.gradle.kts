@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "ADHDBlockScheduler"
+rootProject.name = "FocusFlow"
 include(":app")

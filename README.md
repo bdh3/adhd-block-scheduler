@@ -50,7 +50,7 @@
 ## 🚀 정보
 
 - **최신 버전**: v1.4.7 (Code 35)
-- **최신 APK**: [GitHub Releases](https://github.com/bdh3/adhd-block-scheduler/releases)
+- **최신 APK**: [GitHub Releases](https://github.com/bdh3/focus-flow/releases)
 - **개발 환경**: Android Studio (Koala+), JDK 17
 
 ---

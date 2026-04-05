@@ -97,7 +97,7 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
             Spacer(modifier = Modifier.weight(1f))
 
             Text(
-                text = "버전 1.2.1",
+                text = "버전 1.2.5",
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(bottom = 16.dp)
             )

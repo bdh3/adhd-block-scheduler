@@ -24,6 +24,7 @@ import com.example.adhdblockscheduler.ui.viewmodel.SchedulerUiState
 import com.example.adhdblockscheduler.ui.viewmodel.SchedulerViewModel
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlin.math.abs
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -136,112 +137,218 @@ fun CalendarScreen(
 
     if (showAddTaskDialog) {
         var taskTitle by remember { mutableStateOf("") }
-        var isCycleMode by remember { mutableStateOf(uiState.restMinutes > 0) }
-        var localInterval by remember { mutableIntStateOf(uiState.alarmIntervalMinutes) }
-        var localRestMinutes by remember { mutableIntStateOf(if (uiState.restMinutes > 0) uiState.restMinutes else 10) }
+        var isCycleMode by remember { mutableStateOf(false) } // 기본값은 연속 집중
+        val totalMin = uiState.selectedBlocks.size * 15
+        
+        val divisors = remember(totalMin) {
+            (1..totalMin).filter { totalMin % it == 0 }
+        }
+
+        fun getValidRest(focus: Int, currentRest: Int): Int {
+            val possibleSums = divisors.filter { it > focus }
+            if (possibleSums.isEmpty()) return totalMin - focus
+            return possibleSums.minByOrNull { abs((it - focus) - currentRest) }?.let { it - focus } ?: (totalMin - focus)
+        }
+
+        var localInterval by remember { 
+            mutableIntStateOf(15) 
+        }
+        var localRestMinutes by remember { 
+            mutableIntStateOf(0) 
+        }
 
         AlertDialog(
             onDismissRequest = { showAddTaskDialog = false },
-            title = { Text("세션 생성") },
-            text = {
+            title = { 
                 Column {
-                    TextField(
+                    Text("세션 생성", style = MaterialTheme.typography.headlineSmall)
+                    Text("${totalMin}분 집중 계획", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    // 1. 작업명 입력
+                    OutlinedTextField(
                         value = taskTitle,
                         onValueChange = { taskTitle = it },
-                        label = { Text("어떤 작업을 하시나요?") },
+                        placeholder = { Text("예: 딥러닝 논문 읽기") },
+                        label = { Text("작업 내용") },
                         modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
+                        singleLine = true,
+                        shape = MaterialTheme.shapes.medium
                     )
                     
-                    Spacer(Modifier.height(16.dp))
-                    
-                    Text("작업 모드", style = MaterialTheme.typography.labelLarge)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        FilterChip(
-                            selected = !isCycleMode,
-                            onClick = { isCycleMode = false },
-                            label = { Text("연속 집중") }
-                        )
-                        FilterChip(
-                            selected = isCycleMode,
-                            onClick = { isCycleMode = true },
-                            label = { Text("인터벌 사이클") }
-                        )
-                    }
-
-                    if (isCycleMode) {
+                    // 2. 모드 선택 (탭 스타일)
+                    Column {
+                        Text("집중 방식", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.height(8.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            SuggestionChip(
-                                onClick = { localInterval = 25; localRestMinutes = 5 },
-                                label = { Text("25/5 (뽀모도로)", fontSize = 11.sp) }
-                            )
-                            SuggestionChip(
-                                onClick = { localInterval = 50; localRestMinutes = 10 },
-                                label = { Text("50/10 (고집중)", fontSize = 11.sp) }
-                            )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(42.dp)
+                                .clip(MaterialTheme.shapes.medium)
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .padding(2.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .clip(MaterialTheme.shapes.medium)
+                                    .background(if (!isCycleMode) MaterialTheme.colorScheme.primary else Color.Transparent)
+                                    .clickable { 
+                                        isCycleMode = false
+                                        localInterval = 15
+                                        localRestMinutes = 0
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    "연속 집중", 
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = if (!isCycleMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .clip(MaterialTheme.shapes.medium)
+                                    .background(if (isCycleMode) MaterialTheme.colorScheme.primary else Color.Transparent)
+                                    .clickable { 
+                                        isCycleMode = true
+                                        localInterval = 25.coerceAtMost(totalMin - 5).coerceAtLeast(5)
+                                        localRestMinutes = getValidRest(localInterval, 5)
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    "인터벌 사이클", 
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = if (isCycleMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
 
-                    Spacer(Modifier.height(12.dp))
-                    
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("집중: ${localInterval}분", modifier = Modifier.width(70.dp), style = MaterialTheme.typography.bodyMedium)
-                        Slider(
-                            value = when(localInterval) { 15 -> 0f; 25 -> 1f; 30 -> 2f; 45 -> 3f; 50 -> 4f; 60 -> 5f; else -> 0f },
-                            onValueChange = { 
-                                localInterval = when(it.toInt()) { 0 -> 15; 1 -> 25; 2 -> 30; 3 -> 45; 4 -> 50; 5 -> 60; else -> 15 }
-                            },
-                            valueRange = 0f..5f,
-                            steps = 4,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-
-                    if (isCycleMode) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("휴식: ${localRestMinutes}분", modifier = Modifier.width(70.dp), style = MaterialTheme.typography.bodyMedium)
-                            Slider(
-                                value = when(localRestMinutes) { 5 -> 0f; 10 -> 1f; 15 -> 2f; else -> 1f },
-                                onValueChange = { 
-                                    localRestMinutes = when(it.toInt()) { 0 -> 5; 1 -> 10; 2 -> 15; else -> 10 }
-                                },
-                                valueRange = 0f..2f,
-                                steps = 1,
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
-
-                    Spacer(Modifier.height(16.dp))
-                    
-                    Text("블록 구성 미리보기 (${uiState.selectedBlocks.size * 15}분)", style = MaterialTheme.typography.labelSmall)
-                    Spacer(Modifier.height(4.dp))
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(12.dp)
-                            .clip(MaterialTheme.shapes.extraSmall)
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                    // 3. 상세 설정 영역
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                        shape = MaterialTheme.shapes.medium,
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        val totalMin = uiState.selectedBlocks.size * 15
-                        val rest = if (isCycleMode) localRestMinutes else 0
-                        
-                        if (rest <= 0) {
-                            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.primary))
-                        } else {
-                            var current = 0
-                            while (current < totalMin) {
-                                val fWidth = Math.min(localInterval, totalMin - current).toFloat() / totalMin
-                                if (fWidth > 0) Box(Modifier.weight(fWidth).fillMaxHeight().background(MaterialTheme.colorScheme.primary))
-                                current += localInterval
-                                if (current < totalMin) {
-                                    val rWidth = Math.min(rest, totalMin - current).toFloat() / totalMin
-                                    if (rWidth > 0) Box(Modifier.weight(rWidth).fillMaxHeight().background(MaterialTheme.colorScheme.tertiary))
-                                    current += rest
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            if (!isCycleMode) {
+                                // 연속 집중 모드
+                                Text("알람 주기 (일정 시간마다 리마인드)", style = MaterialTheme.typography.labelMedium)
+                                Spacer(Modifier.height(8.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    listOf(5, 10, 15, 30).forEach { interval ->
+                                        FilterChip(
+                                            selected = localInterval == interval,
+                                            onClick = { localInterval = interval },
+                                            label = { Text("${interval}분") }
+                                        )
+                                    }
+                                }
+                            } else {
+                                // 인터벌 사이클 모드
+                                Text("빠른 프리셋", style = MaterialTheme.typography.labelMedium)
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 4.dp)) {
+                                    AssistChip(
+                                        onClick = { 
+                                            localInterval = 25
+                                            localRestMinutes = getValidRest(25, 5)
+                                        },
+                                        label = { Text("25/5", fontSize = 12.sp) },
+                                        enabled = totalMin >= 30,
+                                        leadingIcon = { Icon(Icons.Default.Timer, null, modifier = Modifier.size(16.dp)) }
+                                    )
+                                    AssistChip(
+                                        onClick = { 
+                                            localInterval = 50
+                                            localRestMinutes = getValidRest(50, 10)
+                                        },
+                                        label = { Text("50/10", fontSize = 12.sp) },
+                                        enabled = totalMin >= 60,
+                                        leadingIcon = { Icon(Icons.Default.Bolt, null, modifier = Modifier.size(16.dp)) }
+                                    )
+                                }
+                                
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+                                
+                                Text("상세 값 수정", style = MaterialTheme.typography.labelMedium)
+                                Spacer(Modifier.height(8.dp))
+                                
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text("집중: ${localInterval}분", modifier = Modifier.width(80.dp), style = MaterialTheme.typography.bodyMedium)
+                                        Slider(
+                                            value = localInterval.toFloat(),
+                                            onValueChange = { 
+                                                localInterval = it.toInt().coerceIn(5, totalMin - 1)
+                                                localRestMinutes = getValidRest(localInterval, localRestMinutes)
+                                            },
+                                            valueRange = 5f..(totalMin - 1).coerceAtLeast(5).toFloat(),
+                                            modifier = Modifier.weight(1f),
+                                            steps = totalMin - 6
+                                        )
+                                    }
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text("휴식: ${localRestMinutes}분", modifier = Modifier.width(80.dp), style = MaterialTheme.typography.bodyMedium)
+                                        Slider(
+                                            value = localRestMinutes.toFloat(),
+                                            onValueChange = { 
+                                                val requestedRest = it.toInt().coerceAtLeast(1)
+                                                val targetSum = divisors.filter { d -> d > localInterval }
+                                                    .minByOrNull { d -> abs((d - localInterval) - requestedRest) } ?: totalMin
+                                                localRestMinutes = targetSum - localInterval
+                                            },
+                                            valueRange = 1f..(totalMin - localInterval).coerceAtLeast(1).toFloat(),
+                                            modifier = Modifier.weight(1f),
+                                            steps = (totalMin - localInterval - 1).coerceAtLeast(0)
+                                        )
+                                    }
+                                    Text(
+                                        "* 전체 시간의 약수에 맞춰 자동 보정됩니다.", 
+                                        style = MaterialTheme.typography.labelSmall, 
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(start = 4.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // 4. 미리보기
+                    Column {
+                        Text("블록 구조 (${totalMin}분)", style = MaterialTheme.typography.labelSmall)
+                        Spacer(Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(16.dp)
+                                .clip(MaterialTheme.shapes.extraSmall)
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                        ) {
+                            val rest = if (isCycleMode) localRestMinutes else 0
+                            
+                            if (rest <= 0) {
+                                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.primary))
+                            } else {
+                                var current = 0
+                                while (current < totalMin) {
+                                    val fWidth = Math.min(localInterval, totalMin - current).toFloat() / totalMin
+                                    if (fWidth > 0) Box(Modifier.weight(fWidth).fillMaxHeight().background(MaterialTheme.colorScheme.primary))
+                                    current += localInterval
+                                    if (current < totalMin) {
+                                        val rWidth = Math.min(rest, totalMin - current).toFloat() / totalMin
+                                        if (rWidth > 0) Box(Modifier.weight(rWidth).fillMaxHeight().background(MaterialTheme.colorScheme.tertiary))
+                                        current += rest
+                                    }
                                 }
                             }
                         }
@@ -250,8 +357,9 @@ fun CalendarScreen(
             },
             confirmButton = {
                 Button(
+                    modifier = Modifier.fillMaxWidth(),
                     onClick = {
-                        val duration = uiState.selectedBlocks.size * 15
+                        val duration = totalMin
                         val firstBlock = uiState.selectedBlocks.minOrNull() ?: System.currentTimeMillis()
                         val calendar = Calendar.getInstance().apply { timeInMillis = firstBlock }
                         
@@ -269,11 +377,14 @@ fun CalendarScreen(
                         onNavigateToTimer()
                     }
                 ) {
-                    Text("시작하기")
+                    Text("전략적 몰입 시작")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showAddTaskDialog = false }) {
+                TextButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { showAddTaskDialog = false }
+                ) {
                     Text("취소")
                 }
             }

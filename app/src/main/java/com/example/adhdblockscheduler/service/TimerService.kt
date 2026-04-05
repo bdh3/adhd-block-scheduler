@@ -95,9 +95,20 @@ class TimerService : Service() {
         timerJob?.cancel()
         _isRunning.value = true
         
-        val intervalSeconds = alarmIntervalMinutes * 60
+        val focusSeconds = alarmIntervalMinutes * 60
+        val restSeconds = restMinutes * 60
+        val cycleSeconds = focusSeconds + restSeconds
+        
         val initialElapsedSeconds = totalSecondsAtStart - initialTotalRemaining
-        _currentBlockIndex.value = if (intervalSeconds > 0) initialElapsedSeconds / intervalSeconds else 0
+        
+        // 초기 인덱스 계산 (사이클 고려)
+        _currentBlockIndex.value = if (restSeconds <= 0) {
+            if (focusSeconds > 0) initialElapsedSeconds / focusSeconds else 0
+        } else {
+            val cycleIdx = initialElapsedSeconds / cycleSeconds
+            val offsetInCycle = initialElapsedSeconds % cycleSeconds
+            if (offsetInCycle < focusSeconds) (cycleIdx * 2) else (cycleIdx * 2 + 1)
+        }
 
         targetEndTimeMillis = SystemClock.elapsedRealtime() + (initialTotalRemaining * 1000L)
         _totalRemainingSeconds.value = initialTotalRemaining
@@ -105,47 +116,44 @@ class TimerService : Service() {
         wakeLock?.acquire(initialTotalRemaining * 1000L + 60000L) 
         startForeground(NotificationHelper.NOTIFICATION_ID, createSilentForegroundNotification())
 
-        // AlarmManager에 중간 알람들 예약 (가장 중요한 부분)
+        // AlarmManager에 중간 알람들 예약
         scheduleAllAlarms(initialTotalRemaining)
 
         timerJob = serviceScope.launch {
             // 첫 번째 정수 초를 즉시 반영하여 1초 지연 현상 방지
             _totalRemainingSeconds.value = initialTotalRemaining
-            _remainingSeconds.value = if (initialTotalRemaining % intervalSeconds == 0) intervalSeconds else initialTotalRemaining % intervalSeconds
+            
+            val initialBlockRemaining = if (restSeconds <= 0) {
+                focusSeconds - (initialElapsedSeconds % focusSeconds)
+            } else {
+                val offset = initialElapsedSeconds % cycleSeconds
+                if (offset < focusSeconds) focusSeconds - offset else cycleSeconds - offset
+            }
+            _remainingSeconds.value = initialBlockRemaining.toInt()
 
             while (true) {
-                delay(1000L) // 먼저 대기하고 그 다음 초를 계산
+                delay(1000L) 
                 
                 val now = SystemClock.elapsedRealtime()
                 val remainingMillis = targetEndTimeMillis - now
                 
                 if (remainingMillis <= 0) break
                 
-                // +500ms 보정으로 정수 변환 시 1초가 튀는 현상 방지 (Rounding)
                 val currentTotalRemaining = ((remainingMillis + 500) / 1000).toInt()
                 _totalRemainingSeconds.value = currentTotalRemaining
-                
-                // 사이클 기반 인덱스 및 남은 시간 계산 (W: 집중, R: 휴식)
-                val focusSeconds = alarmIntervalMinutes * 60
-                val restSeconds = restMinutes * 60
-                val cycleSeconds = focusSeconds + restSeconds
                 
                 val sessionElapsedSeconds = totalSecondsAtStart - currentTotalRemaining
                 
                 val (newBlockIndex, currentBlockRemaining) = if (restSeconds <= 0) {
-                    // 기존 모드 (집중만 있음)
                     val idx = sessionElapsedSeconds / focusSeconds
                     val rem = focusSeconds - (sessionElapsedSeconds % focusSeconds)
                     idx to rem
                 } else {
-                    // 사이클 모드 (집중/휴식 교차)
                     val cycleIdx = sessionElapsedSeconds / cycleSeconds
                     val offsetInCycle = sessionElapsedSeconds % cycleSeconds
                     if (offsetInCycle < focusSeconds) {
-                        // 현재 집중 중
                         (cycleIdx * 2) to (focusSeconds - offsetInCycle)
                     } else {
-                        // 현재 휴식 중
                         (cycleIdx * 2 + 1) to (cycleSeconds - offsetInCycle)
                     }
                 }
@@ -153,7 +161,7 @@ class TimerService : Service() {
                 if (newBlockIndex != _currentBlockIndex.value && currentTotalRemaining > 0) {
                     _currentBlockIndex.value = newBlockIndex
                 }
-                _remainingSeconds.value = if (currentBlockRemaining == 0) focusSeconds else currentBlockRemaining.toInt()
+                _remainingSeconds.value = currentBlockRemaining.toInt()
             }
 
             // 완료 처리
@@ -244,7 +252,39 @@ class TimerService : Service() {
         timerJob?.cancel()
         _isRunning.value = false
         releaseWakeLock()
-        stopForeground(true)
+        stopForeground(STOP_FOREGROUND_REMOVE)
+    }
+
+    fun skipToNext() {
+        val currentRemaining = _remainingSeconds.value
+        val totalRemaining = _totalRemainingSeconds.value
+        
+        // 현재 남은 블록 시간만큼 전체 남은 시간에서 차감
+        val newTotalRemaining = (totalRemaining - currentRemaining).coerceAtLeast(0)
+        _totalRemainingSeconds.value = newTotalRemaining
+        
+        if (newTotalRemaining <= 0) {
+            stopTimer()
+            onFinished()
+            return
+        }
+
+        // 다음 블록 인덱스로 이동
+        val nextIndex = _currentBlockIndex.value + 1
+        _currentBlockIndex.value = nextIndex
+        
+        // 다음 블록의 성격(집중/휴식) 결정: 짝수(0, 2, 4...) 집중, 홀수(1, 3, 5...) 휴식
+        val isRestNext = (restMinutes > 0) && (nextIndex % 2 != 0)
+        val nextInterval = if (isRestNext) restMinutes else alarmIntervalMinutes
+        
+        // 다음 블록의 시간 설정 (전체 남은 시간을 초과하지 않음)
+        _remainingSeconds.value = Math.min(nextInterval * 60, newTotalRemaining)
+        
+        // 타이머 재설정 및 재시작 (알람 재스케줄링 포함)
+        startTimer(newTotalRemaining)
+        
+        // 상태 알림 전송 ("휴식 시작" 또는 "집중 재개")
+        onTransition(if (isRestNext) "휴식 시작" else "집중 재개", 0, false)
     }
 
     fun stopTimer() {

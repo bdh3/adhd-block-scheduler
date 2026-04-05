@@ -111,68 +111,14 @@ fun SchedulerScreen(viewModel: SchedulerViewModel, onNavigateToCalendar: () -> U
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
-                        var showAddTaskDialog by remember { mutableStateOf(false) }
                         
-                        TextButton(onClick = { showAddTaskDialog = true }) {
+                        TextButton(onClick = {
+                            viewModel.selectDate(System.currentTimeMillis())
+                            onNavigateToCalendar()
+                        }) {
                             Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("추가")
-                        }
-
-                        if (showAddTaskDialog) {
-                            var taskTitle by remember { mutableStateOf("") }
-                            var isCycleMode by remember { mutableStateOf(uiState.restMinutes > 0) }
-                            var localInterval by remember { mutableIntStateOf(uiState.alarmIntervalMinutes) }
-                            var localRestMinutes by remember { mutableIntStateOf(if (uiState.restMinutes > 0) uiState.restMinutes else 10) }
-
-                            AlertDialog(
-                                onDismissRequest = { showAddTaskDialog = false },
-                                title = { Text("새 작업 추가") },
-                                text = {
-                                    Column {
-                                        TextField(
-                                            value = taskTitle,
-                                            onValueChange = { taskTitle = it },
-                                            label = { Text("어떤 작업을 하시나요?") },
-                                            modifier = Modifier.fillMaxWidth(),
-                                            singleLine = true
-                                        )
-                                        Spacer(Modifier.height(16.dp))
-                                        Text("작업 전략", style = MaterialTheme.typography.labelLarge)
-                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            FilterChip(selected = !isCycleMode, onClick = { isCycleMode = false }, label = { Text("연속") })
-                                            FilterChip(selected = isCycleMode, onClick = { isCycleMode = true }, label = { Text("사이클") })
-                                        }
-                                        if (isCycleMode) {
-                                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                SuggestionChip(onClick = { localInterval = 25; localRestMinutes = 5 }, label = { Text("25/5", fontSize = 11.sp) })
-                                                SuggestionChip(onClick = { localInterval = 50; localRestMinutes = 10 }, label = { Text("50/10", fontSize = 11.sp) })
-                                            }
-                                        }
-                                        Slider(
-                                            value = localInterval.toFloat(),
-                                            onValueChange = { localInterval = it.toInt() },
-                                            valueRange = 5f..60f,
-                                            steps = 10
-                                        )
-                                        Text("집중: ${localInterval}분 / 휴식: ${if(isCycleMode) localRestMinutes else 0}분", style = MaterialTheme.typography.bodySmall)
-                                    }
-                                },
-                                confirmButton = {
-                                    Button(onClick = {
-                                        viewModel.addSchedule(
-                                            taskTitle = taskTitle.ifBlank { "새 작업" },
-                                            durationMinutes = 60,
-                                            startTimeHour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY),
-                                            startTimeMinute = Calendar.getInstance().get(Calendar.MINUTE),
-                                            startNewSession = false,
-                                            intervalMinutes = localInterval,
-                                            restMinutes = if (isCycleMode) localRestMinutes else 0
-                                        )
-                                        showAddTaskDialog = false
-                                    }) { Text("추가") }
-                                }
-                            )
+                            Text("추가 (캘린더에서)")
                         }
                     }
                 }

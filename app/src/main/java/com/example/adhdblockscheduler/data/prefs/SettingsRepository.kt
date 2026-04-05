@@ -37,7 +37,7 @@ class SettingsRepository(private val context: Context) {
 
     val restMinutes: Flow<Int> = context.dataStore.data
         .map { preferences ->
-            preferences[REST_MINUTES] ?: 15 // Default: 15 min rest
+            preferences[REST_MINUTES] ?: 0 // Default: 0 min rest (Continuous Focus)
         }
 
     val alarmIntervalMinutes: Flow<Int> = context.dataStore.data

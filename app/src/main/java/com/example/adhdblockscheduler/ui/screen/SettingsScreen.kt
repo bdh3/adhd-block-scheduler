@@ -3,11 +3,13 @@ package com.example.adhdblockscheduler.ui.screen
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.adhdblockscheduler.BuildConfig
 import com.example.adhdblockscheduler.ui.viewmodel.SchedulerViewModel
+import kotlin.math.abs
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -18,15 +20,12 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
     var restMinutes by remember { mutableIntStateOf(uiState.restMinutes) }
     var vibrationEnabled by remember { mutableStateOf(uiState.vibrationEnabled) }
 
-    // 초기값 동기화 (한 번만)
-    LaunchedEffect(uiState.alarmIntervalMinutes) {
-        alarmInterval = uiState.alarmIntervalMinutes
-    }
-    LaunchedEffect(uiState.restMinutes) {
-        restMinutes = uiState.restMinutes
-    }
-    LaunchedEffect(uiState.vibrationEnabled) {
-        vibrationEnabled = uiState.vibrationEnabled
+    val divisorsOf60 = listOf(1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30, 60)
+
+    fun getValidRestFor60(focus: Int, currentRest: Int): Int {
+        val possibleSums = divisorsOf60.filter { it > focus }
+        if (possibleSums.isEmpty()) return 60 - focus
+        return possibleSums.minByOrNull { abs((it - focus) - currentRest) }?.let { it - focus } ?: (60 - focus)
     }
 
     Scaffold(
@@ -90,41 +89,61 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                         FilterChip(
                             selected = alarmInterval == 25 && restMinutes == 5,
                             onClick = { alarmInterval = 25; restMinutes = 5 },
-                            label = { Text("25/5 (뽀모도로)") }
+                            label = { Text("25/5") }
                         )
                         FilterChip(
                             selected = alarmInterval == 50 && restMinutes == 10,
                             onClick = { alarmInterval = 50; restMinutes = 10 },
-                            label = { Text("50/10 (고집중)") }
+                            label = { Text("50/10") }
                         )
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                        Text("집중: ${alarmInterval}분", modifier = Modifier.width(80.dp), style = MaterialTheme.typography.bodyMedium)
-                        Slider(
-                            value = when(alarmInterval) { 15 -> 0f; 25 -> 1f; 30 -> 2f; 45 -> 3f; 50 -> 4f; 60 -> 5f; else -> 0f },
-                            onValueChange = { 
-                                alarmInterval = when(it.toInt()) { 0 -> 15; 1 -> 25; 2 -> 30; 3 -> 45; 4 -> 50; 5 -> 60; else -> 15 }
-                            },
-                            valueRange = 0f..5f,
-                            steps = 4,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
+                    if (restMinutes == 0) {
+                        Text("알람 주기", style = MaterialTheme.typography.labelMedium)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            listOf(5, 10, 15, 30).forEach { interval ->
+                                FilterChip(
+                                    selected = alarmInterval == interval,
+                                    onClick = { alarmInterval = interval },
+                                    label = { Text("${interval}분") }
+                                )
+                            }
+                        }
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("집중: ${alarmInterval}분", modifier = Modifier.width(80.dp), style = MaterialTheme.typography.bodyMedium)
+                            Slider(
+                                value = alarmInterval.toFloat(),
+                                onValueChange = { 
+                                    alarmInterval = it.toInt().coerceIn(5, 59)
+                                    restMinutes = getValidRestFor60(alarmInterval, restMinutes)
+                                },
+                                valueRange = 5f..59f,
+                                modifier = Modifier.weight(1f),
+                                steps = 54 // 59 - 5 = 54 steps for 1-minute increments
+                            )
+                        }
 
-                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                        Text("휴식: ${restMinutes}분", modifier = Modifier.width(80.dp), style = MaterialTheme.typography.bodyMedium)
-                        Slider(
-                            value = when(restMinutes) { 0 -> 0f; 5 -> 1f; 10 -> 2f; 15 -> 3f; else -> 0f },
-                            onValueChange = { 
-                                restMinutes = when(it.toInt()) { 0 -> 0; 1 -> 5; 2 -> 10; 3 -> 15; else -> 0 }
-                            },
-                            valueRange = 0f..3f,
-                            steps = 2,
-                            modifier = Modifier.weight(1f)
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("휴식: ${restMinutes}분", modifier = Modifier.width(80.dp), style = MaterialTheme.typography.bodyMedium)
+                            Slider(
+                                value = restMinutes.toFloat(),
+                                onValueChange = { 
+                                    val requestedRest = it.toInt().coerceAtLeast(1)
+                                    val targetSum = divisorsOf60.filter { d -> d > alarmInterval }
+                                        .minByOrNull { d -> abs((d - alarmInterval) - requestedRest) } ?: 60
+                                    restMinutes = targetSum - alarmInterval
+                                },
+                                valueRange = 1f..(60 - alarmInterval).toFloat(),
+                                modifier = Modifier.weight(1f),
+                                steps = (60 - alarmInterval - 1).coerceAtLeast(0)
+                            )
+                        }
                     }
                 }
             }

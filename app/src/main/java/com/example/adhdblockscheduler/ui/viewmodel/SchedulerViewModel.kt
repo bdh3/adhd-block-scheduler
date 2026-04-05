@@ -229,39 +229,18 @@ class SchedulerViewModel(
     fun loadScheduledSession(schedule: ScheduleBlock) {
         if (_uiState.value.isRunning) return
         
+        _uiState.update { it.copy(
+            selectedTaskId = "sched_${schedule.id}",
+            sessionTotalMinutes = schedule.durationMinutes,
+            currentScheduleId = schedule.id,
+            remainingSeconds = it.alarmIntervalMinutes * 60,
+            totalRemainingSeconds = schedule.durationMinutes * 60
+        ) }
+        
+        generateDefaultBlocks(_uiState.value.alarmIntervalMinutes, schedule.durationMinutes)
+        
+        // 불러온 즉시 시작 (요구사항 2번)
         viewModelScope.launch {
-            val tasksForDate = repository.getTasksForDate(_selectedDate.value).first()
-            
-            val cal = Calendar.getInstance().apply { timeInMillis = schedule.startTimeMillis }
-            val endCal = Calendar.getInstance().apply { 
-                timeInMillis = schedule.startTimeMillis + schedule.durationMinutes * 60 * 1000L 
-            }
-            val timeStr = String.format(Locale.getDefault(), "%02d:%02d ~ %02d:%02d", 
-                cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE),
-                endCal.get(Calendar.HOUR_OF_DAY), endCal.get(Calendar.MINUTE))
-            val displayTitle = "${schedule.taskTitle} $timeStr"
-
-            val existingTask = tasksForDate.find { it.title == displayTitle || it.title == schedule.taskTitle }
-            val taskId = existingTask?.id ?: run {
-                val newTask = Task(
-                    title = displayTitle,
-                    scheduledDateMillis = _selectedDate.value
-                )
-                repository.insertTask(newTask)
-                newTask.id
-            }
-            
-            _uiState.update { it.copy(
-                selectedTaskId = taskId,
-                sessionTotalMinutes = schedule.durationMinutes,
-                currentScheduleId = schedule.id,
-                remainingSeconds = it.alarmIntervalMinutes * 60,
-                totalRemainingSeconds = schedule.durationMinutes * 60
-            ) }
-            
-            generateDefaultBlocks(_uiState.value.alarmIntervalMinutes, schedule.durationMinutes)
-            
-            // 불러온 즉시 시작 (요구사항 2번)
             delay(100) // UI 업데이트 대기
             startTimer()
         }
@@ -274,6 +253,11 @@ class SchedulerViewModel(
             val startTime = Calendar.getInstance().apply {
                 timeInMillis = _selectedDate.value
                 if (hourOfDay != null) set(Calendar.HOUR_OF_DAY, hourOfDay)
+                else {
+                    // 현재 시간 기준으로 블록 시작 시간 설정
+                    val now = Calendar.getInstance()
+                    set(Calendar.HOUR_OF_DAY, now.get(Calendar.HOUR_OF_DAY))
+                }
                 set(Calendar.MINUTE, 0)
                 set(Calendar.SECOND, 0)
                 set(Calendar.MILLISECOND, 0)
@@ -286,18 +270,15 @@ class SchedulerViewModel(
             )
             scheduleRepository.insertSchedule(newSchedule)
             
-            val newTask = Task(
-                title = taskTitle,
-                scheduledDateMillis = _selectedDate.value
-            )
-            repository.insertTask(newTask)
-            
             _uiState.update { it.copy(
-                selectedTaskId = newTask.id,
+                selectedTaskId = "sched_${newSchedule.id}",
                 currentScheduleId = newSchedule.id,
                 sessionTotalMinutes = totalMinutes,
                 totalRemainingSeconds = 0 
             ) }
+            
+            // 새로 생성된 세션 로드
+            loadScheduledSession(newSchedule)
         }
     }
 

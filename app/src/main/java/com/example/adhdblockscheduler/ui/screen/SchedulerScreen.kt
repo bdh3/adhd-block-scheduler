@@ -83,9 +83,12 @@ fun SchedulerScreen(viewModel: SchedulerViewModel, onNavigateToCalendar: () -> U
                                     .background(
                                         color = when {
                                             index < uiState.currentBlockIndex -> MaterialTheme.colorScheme.outlineVariant
-                                            index == uiState.currentBlockIndex -> MaterialTheme.colorScheme.primary
+                                            index == uiState.currentBlockIndex -> {
+                                                if (block.type == BlockType.FOCUS) MaterialTheme.colorScheme.primary 
+                                                else MaterialTheme.colorScheme.tertiary
+                                            }
                                             block.type == BlockType.FOCUS -> MaterialTheme.colorScheme.primaryContainer
-                                            else -> MaterialTheme.colorScheme.secondaryContainer
+                                            else -> MaterialTheme.colorScheme.tertiaryContainer
                                         },
                                         shape = MaterialTheme.shapes.extraSmall
                                     )
@@ -211,22 +214,22 @@ fun TimerHeader(
                     progress = { progress },
                     modifier = Modifier.size(220.dp),
                     strokeWidth = 12.dp,
-                    color = if (blockType == BlockType.FOCUS) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
-                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                    strokeCap = StrokeCap.Round
+                    color = if (blockType == BlockType.FOCUS) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                strokeCap = StrokeCap.Round
+            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = timeText,
+                    style = MaterialTheme.typography.displayLarge,
+                    fontWeight = FontWeight.Bold
                 )
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = timeText,
-                        style = MaterialTheme.typography.displayLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "전체 남은 시간",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.outline
-                    )
-                }
+                Text(
+                    text = if (blockType == BlockType.FOCUS) "전체 남은 시간" else "휴식 중",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (blockType == BlockType.FOCUS) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.tertiary
+                )
+            }
             }
             
             Spacer(modifier = Modifier.height(24.dp))

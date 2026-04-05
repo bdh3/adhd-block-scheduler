@@ -14,11 +14,15 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
     val uiState by viewModel.uiState.collectAsState()
     
     var alarmInterval by remember { mutableIntStateOf(uiState.alarmIntervalMinutes) }
+    var restMinutes by remember { mutableIntStateOf(uiState.restMinutes) }
     var vibrationEnabled by remember { mutableStateOf(uiState.vibrationEnabled) }
 
     // 초기값 동기화 (한 번만)
     LaunchedEffect(uiState.alarmIntervalMinutes) {
         alarmInterval = uiState.alarmIntervalMinutes
+    }
+    LaunchedEffect(uiState.restMinutes) {
+        restMinutes = uiState.restMinutes
     }
     LaunchedEffect(uiState.vibrationEnabled) {
         vibrationEnabled = uiState.vibrationEnabled
@@ -30,11 +34,12 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                 title = { Text("설정") },
                 actions = {
                     val isModified = (uiState.alarmIntervalMinutes != alarmInterval) || 
+                                     (uiState.restMinutes != restMinutes) ||
                                      (uiState.vibrationEnabled != vibrationEnabled)
 
                     Button(
                         onClick = {
-                            viewModel.saveSettings(alarmInterval, vibrationEnabled, false)
+                            viewModel.saveSettings(alarmInterval, restMinutes, vibrationEnabled, false)
                         },
                         modifier = Modifier.padding(end = 8.dp),
                         enabled = isModified
@@ -76,6 +81,37 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                             },
                             valueRange = 0f..2f,
                             steps = 1,
+                            modifier = Modifier.width(120.dp)
+                        )
+                    }
+                }
+            )
+
+            ListItem(
+                headlineContent = { Text("휴식 시간") },
+                supportingContent = { Text(if (restMinutes > 0) "집중 블록 사이마다 ${restMinutes}분씩 휴식합니다." else "휴식 없이 계속 집중합니다.") },
+                trailingContent = {
+                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        Text(if (restMinutes > 0) "${restMinutes}분" else "끄기")
+                        Slider(
+                            value = when(restMinutes) {
+                                0 -> 0f
+                                5 -> 1f
+                                10 -> 2f
+                                15 -> 3f
+                                else -> 0f
+                            },
+                            onValueChange = { 
+                                restMinutes = when(it.toInt()) {
+                                    0 -> 0
+                                    1 -> 5
+                                    2 -> 10
+                                    3 -> 15
+                                    else -> 0
+                                }
+                            },
+                            valueRange = 0f..3f,
+                            steps = 2,
                             modifier = Modifier.width(120.dp)
                         )
                     }

@@ -43,7 +43,8 @@ data class SchedulerUiState(
     val allSchedules: List<ScheduleBlock> = emptyList(),
     val currentScheduleId: String? = null,
     val selectionAnchor: Long? = null,
-    val activeSessionInterval: Int = 15
+    val activeSessionInterval: Int = 15,
+    val restMinutes: Int = 0
 )
 
 class SchedulerViewModel(
@@ -134,6 +135,15 @@ class SchedulerViewModel(
         viewModelScope.launch {
             settingsRepository.vibrationEnabled.collect { enabled ->
                 _uiState.update { it.copy(vibrationEnabled = enabled) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.restMinutes.collect { minutes ->
+                _uiState.update { it.copy(restMinutes = minutes) }
+                // 세션 비활성 시 블록 미리보기 갱신
+                if (!_uiState.value.isRunning && _uiState.value.totalRemainingSeconds <= 0) {
+                    generateDefaultBlocks(_uiState.value.alarmIntervalMinutes, _uiState.value.sessionTotalMinutes)
+                }
             }
         }
     }
@@ -234,13 +244,50 @@ class SchedulerViewModel(
 
     private fun generateDefaultBlocks(intervalMinutes: Int, totalMinutes: Int) {
         val blocks = mutableListOf<TimeBlock>()
-        val numBlocks = (totalMinutes + intervalMinutes - 1) / intervalMinutes
-        for (i in 0 until numBlocks) {
-            blocks.add(TimeBlock(
-                startTime = i * intervalMinutes * 60L,
-                durationMinutes = intervalMinutes,
-                type = BlockType.FOCUS
-            ))
+        val restMin = _uiState.value.restMinutes
+        
+        if (restMin <= 0) {
+            // 기존 로직: 집중 블록만 생성
+            val numBlocks = (totalMinutes + intervalMinutes - 1) / intervalMinutes
+            for (i in 0 until numBlocks) {
+                blocks.add(TimeBlock(
+                    startTime = i * intervalMinutes * 60L,
+                    durationMinutes = intervalMinutes,
+                    type = BlockType.FOCUS
+                ))
+            }
+        } else {
+            // 집중/휴식 교차 로직
+            var currentMinutes = 0
+            while (currentMinutes < totalMinutes) {
+                // 집중 블록 추가
+                val focusDuration = if (currentMinutes + intervalMinutes > totalMinutes) {
+                    totalMinutes - currentMinutes
+                } else {
+                    intervalMinutes
+                }
+                blocks.add(TimeBlock(
+                    startTime = currentMinutes * 60L,
+                    durationMinutes = focusDuration,
+                    type = BlockType.FOCUS
+                ))
+                currentMinutes += focusDuration
+                
+                // 휴식 블록 추가 (남은 시간이 있다면)
+                if (currentMinutes < totalMinutes) {
+                    val restDuration = if (currentMinutes + restMin > totalMinutes) {
+                        totalMinutes - currentMinutes
+                    } else {
+                        restMin
+                    }
+                    blocks.add(TimeBlock(
+                        startTime = currentMinutes * 60L,
+                        durationMinutes = restDuration,
+                        type = BlockType.REST
+                    ))
+                    currentMinutes += restDuration
+                }
+            }
         }
         _uiState.update { it.copy(timeBlocks = blocks) }
     }
@@ -487,9 +534,10 @@ class SchedulerViewModel(
         ) }
     }
 
-    fun saveSettings(interval: Int, vibration: Boolean, calendarSync: Boolean) {
+    fun saveSettings(interval: Int, rest: Int, vibration: Boolean, calendarSync: Boolean) {
         viewModelScope.launch {
             settingsRepository.setAlarmIntervalMinutes(interval)
+            settingsRepository.setRestMinutes(rest)
             settingsRepository.setVibrationEnabled(vibration)
             settingsRepository.setCalendarSyncEnabled(calendarSync)
         }

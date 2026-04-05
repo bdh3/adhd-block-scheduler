@@ -3,7 +3,8 @@ package com.example.adhdblockscheduler.model
 import java.util.UUID
 
 enum class BlockType {
-    FOCUS
+    FOCUS,
+    REST
 }
 
 data class TimeBlock(

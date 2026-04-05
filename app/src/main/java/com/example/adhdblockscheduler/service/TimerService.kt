@@ -307,7 +307,8 @@ class TimerService : Service() {
         
         // 상태 알림 전송 ("휴식 시작" 또는 "집중 재개")
         val status = if (isRestNext) "휴식 시작" else "집중 재개"
-        onTransition("$taskTitle ($status)", 0, false)
+        val totalElapsedMinutes = (totalSecondsAtStart - newTotalRemaining) / 60
+        onTransition("$taskTitle ($status)", totalElapsedMinutes, false)
     }
 
     fun stopTimer() {

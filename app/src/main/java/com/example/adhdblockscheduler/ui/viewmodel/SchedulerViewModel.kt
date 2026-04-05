@@ -565,7 +565,8 @@ class SchedulerViewModel(
         if (state.totalRemainingSeconds <= 0) {
             // 선택된 태스크가 있는 상태에서 처음 시작
             val totalSeconds = state.sessionTotalMinutes * 60
-            val title = state.tasks.find { it.id == state.selectedTaskId }?.title ?: "작업"
+            // 가공된 Task.title 대신 순수 작업명인 selectedTaskTitle을 최우선 사용
+            val title = state.selectedTaskTitle ?: state.tasks.find { it.id == state.selectedTaskId }?.title ?: "작업"
             
             _uiState.update { it.copy(
                 totalRemainingSeconds = totalSeconds,
@@ -585,11 +586,12 @@ class SchedulerViewModel(
             timerService?.startTimer(totalSeconds)
         } else {
             // 일시정지 후 재개
+            val title = state.selectedTaskTitle ?: state.tasks.find { it.id == state.selectedTaskId }?.title ?: "작업"
             timerService?.setTimerConfig(
                 interval = state.activeSessionInterval,
                 rest = state.restMinutes,
                 totalSec = state.sessionTotalMinutes * 60,
-                title = state.tasks.find { it.id == state.selectedTaskId }?.title ?: "작업",
+                title = title,
                 vibrate = state.vibrationEnabled,
                 onTransition = { t, e, f -> onBlockTransition(t, e, f) },
                 onFinished = { onSessionFinished() }

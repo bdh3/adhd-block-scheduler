@@ -40,7 +40,8 @@ data class SchedulerUiState(
     val selectedBlocks: Set<Long> = emptySet(),
     val dailySchedules: List<ScheduleBlock> = emptyList(),
     val allSchedules: List<ScheduleBlock> = emptyList(), // 전체 일정 추가
-    val currentScheduleId: String? = null
+    val currentScheduleId: String? = null,
+    val selectionAnchor: Long? = null // 블록 선택 기준점 추가
 )
 
 class SchedulerViewModel(
@@ -489,26 +490,38 @@ class SchedulerViewModel(
 
     fun toggleBlock(startTimeMillis: Long) {
         _uiState.update { state ->
-            val newSelected = state.selectedBlocks.toMutableSet()
-            if (newSelected.contains(startTimeMillis)) {
-                val remaining = newSelected.filter { it < startTimeMillis }.toSet()
-                state.copy(selectedBlocks = remaining)
+            val anchor = state.selectionAnchor
+            
+            if (anchor == null) {
+                // 처음 선택: 앵커 설정 및 1개 선택
+                state.copy(
+                    selectedBlocks = setOf(startTimeMillis),
+                    selectionAnchor = startTimeMillis
+                )
+            } else if (startTimeMillis == anchor) {
+                // 앵커(첫 블록) 재터치: 전체 취소
+                state.copy(
+                    selectedBlocks = emptySet(),
+                    selectionAnchor = null
+                )
             } else {
-                newSelected.add(startTimeMillis)
-                val min = newSelected.minOrNull() ?: startTimeMillis
-                val max = newSelected.maxOrNull() ?: startTimeMillis
-                var current = min
-                while (current <= max) {
-                    newSelected.add(current)
+                // 앵커가 있는 상태에서 다른 블록 터치: 범위 재설정 (확장 또는 축소)
+                val start = minOf(anchor, startTimeMillis)
+                val end = maxOf(anchor, startTimeMillis)
+                
+                val newRange = mutableSetOf<Long>()
+                var current = start
+                while (current <= end) {
+                    newRange.add(current)
                     current += 15 * 60 * 1000L
                 }
-                state.copy(selectedBlocks = newSelected)
+                state.copy(selectedBlocks = newRange)
             }
         }
     }
 
     fun clearSelectedBlocks() {
-        _uiState.update { it.copy(selectedBlocks = emptySet()) }
+        _uiState.update { it.copy(selectedBlocks = emptySet(), selectionAnchor = null) }
     }
 
     companion object {

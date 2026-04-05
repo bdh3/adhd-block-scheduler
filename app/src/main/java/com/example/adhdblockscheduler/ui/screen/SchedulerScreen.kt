@@ -318,17 +318,9 @@ fun TaskItem(
                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                 )
             )
-            if (!isSelected) {
-                IconButton(onClick = onDelete) {
-                    Icon(Icons.Default.Delete, contentDescription = "삭제", tint = MaterialTheme.colorScheme.error)
-                }
-            } else {
-                Text(
-                    text = "선택됨",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(end = 8.dp)
-                )
+            
+            IconButton(onClick = onDelete) {
+                Icon(Icons.Default.Delete, contentDescription = "삭제", tint = MaterialTheme.colorScheme.error)
             }
         }
     }

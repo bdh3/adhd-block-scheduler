@@ -113,7 +113,22 @@ class SchedulerViewModel(
         // 설정값 실시간 구독 및 반영
         viewModelScope.launch {
             settingsRepository.alarmIntervalMinutes.collect { interval ->
-                _uiState.update { it.copy(alarmIntervalMinutes = interval) }
+                _uiState.update { state ->
+                    val isSessionActive = state.isRunning || state.totalRemainingSeconds > 0
+                    if (!isSessionActive) {
+                        // 세션이 활성화되지 않았을 때만 설정값에 맞춰 세션 인터벌과 블록 미리보기 갱신
+                        state.copy(
+                            alarmIntervalMinutes = interval,
+                            activeSessionInterval = interval
+                        )
+                    } else {
+                        state.copy(alarmIntervalMinutes = interval)
+                    }
+                }
+                // 블록 미리보기 갱신 (세션 비활성 시)
+                if (!_uiState.value.isRunning && _uiState.value.totalRemainingSeconds <= 0) {
+                    generateDefaultBlocks(interval, _uiState.value.sessionTotalMinutes)
+                }
             }
         }
         viewModelScope.launch {
@@ -377,12 +392,21 @@ class SchedulerViewModel(
 
     fun startTimer() {
         val state = _uiState.value
+        val currentInterval = state.alarmIntervalMinutes // 최신 설정값 사용
+
         if (state.totalRemainingSeconds <= 0) {
             val totalSeconds = state.sessionTotalMinutes * 60
-            _uiState.update { it.copy(totalRemainingSeconds = totalSeconds) }
+            
+            // 시작 시점의 인터벌을 세션용으로 박제하고 블록 재생성
+            _uiState.update { it.copy(
+                totalRemainingSeconds = totalSeconds,
+                activeSessionInterval = currentInterval
+            ) }
+            generateDefaultBlocks(currentInterval, state.sessionTotalMinutes)
+            
             timerService?.setTimerConfig(
-                interval = state.activeSessionInterval,
-                totalSec = state.sessionTotalMinutes * 60,
+                interval = currentInterval,
+                totalSec = totalSeconds,
                 title = state.tasks.find { it.id == state.selectedTaskId }?.title ?: "작업",
                 vibrate = state.vibrationEnabled,
                 onTransition = { title, elapsed, finished -> onBlockTransition(title, elapsed, finished) },
@@ -390,6 +414,7 @@ class SchedulerViewModel(
             )
             timerService?.startTimer(totalSeconds)
         } else {
+            // 재개 시에는 기존 박제된 activeSessionInterval 유지
             timerService?.setTimerConfig(
                 interval = state.activeSessionInterval,
                 totalSec = state.sessionTotalMinutes * 60,

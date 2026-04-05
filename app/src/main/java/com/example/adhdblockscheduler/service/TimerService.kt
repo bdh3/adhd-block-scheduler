@@ -141,47 +141,57 @@ class TimerService : Service() {
     }
 
     private fun scheduleAllAlarms(initialRemainingSeconds: Int) {
-        val intervalMillis = alarmIntervalMinutes * 60 * 1000L
-        val totalMillis = initialRemainingSeconds * 1000L
+        stopAllAlarms() // 확실히 비우고 시작
+        
+        val intervalSeconds = alarmIntervalMinutes * 60
         val currentTime = SystemClock.elapsedRealtime()
         
-        // 1. 중간 알람들 예약
-        var nextAlarmTime = currentTime + (remainingSeconds.value * 1000L)
-        var elapsed = ((totalSecondsAtStart - initialRemainingSeconds) / (alarmIntervalMinutes * 60) + 1) * alarmIntervalMinutes
+        // 1. 현재 블록이 끝나기까지 남은 시간 계산
+        val secondsElapsedInCurrentBlock = (totalSecondsAtStart - initialRemainingSeconds) % intervalSeconds
+        val secondsUntilNextBlock = intervalSeconds - secondsElapsedInCurrentBlock
+        
+        var nextAlarmOffsetSeconds = secondsUntilNextBlock.toLong()
+        // 현재까지 진행된 총 시간 (분 단위)
+        var totalElapsedMinutes = ((totalSecondsAtStart - initialRemainingSeconds + secondsUntilNextBlock) / 60)
 
-        while (nextAlarmTime < currentTime + totalMillis) {
-            val intent = Intent(this, TimerAlarmReceiver::class.java).apply {
+        // 2. 중간 알람들 예약 (종료 전까지)
+        while (nextAlarmOffsetSeconds < initialRemainingSeconds) {
+            val intent = Intent(this, com.example.adhdblockscheduler.service.TimerAlarmReceiver::class.java).apply {
                 putExtra("taskTitle", taskTitle)
-                putExtra("elapsedMinutes", elapsed)
+                putExtra("elapsedMinutes", totalElapsedMinutes)
                 putExtra("isFinished", false)
                 putExtra("vibrationEnabled", vibrationEnabled)
             }
+            
+            // PendingIntent ID를 totalElapsedMinutes로 설정하여 고유성 확보
             val pendingIntent = PendingIntent.getBroadcast(
-                this, elapsed, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                this, totalElapsedMinutes, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             
-            // 정확한 시점에 알람 예약
-            alarmManager.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, nextAlarmTime, pendingIntent)
+            val alarmTime = currentTime + (nextAlarmOffsetSeconds * 1000L)
+            alarmManager.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, alarmTime, pendingIntent)
             pendingAlarms.add(pendingIntent)
             
-            nextAlarmTime += intervalMillis
-            elapsed += alarmIntervalMinutes
+            nextAlarmOffsetSeconds += intervalSeconds
+            totalElapsedMinutes += alarmIntervalMinutes
         }
 
-        // 2. 최종 종료 알람 예약
-        val finishIntent = Intent(this, TimerAlarmReceiver::class.java).apply {
-            putExtra("taskTitle", taskTitle)
-            putExtra("elapsedMinutes", totalSecondsAtStart / 60)
-            putExtra("isFinished", true)
-            putExtra("vibrationEnabled", vibrationEnabled)
+        // 3. 최종 종료 알람 예약 (남은 시간이 0보다 클 때만)
+        if (initialRemainingSeconds > 0) {
+            val finishIntent = Intent(this, com.example.adhdblockscheduler.service.TimerAlarmReceiver::class.java).apply {
+                putExtra("taskTitle", taskTitle)
+                putExtra("elapsedMinutes", totalSecondsAtStart / 60)
+                putExtra("isFinished", true)
+                putExtra("vibrationEnabled", vibrationEnabled)
+            }
+            val finishPendingIntent = PendingIntent.getBroadcast(
+                this, 99999, finishIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            alarmManager.setExactAndAllowWhileIdle(
+                AlarmManager.ELAPSED_REALTIME_WAKEUP, currentTime + (initialRemainingSeconds * 1000L), finishPendingIntent
+            )
+            pendingAlarms.add(finishPendingIntent)
         }
-        val finishPendingIntent = PendingIntent.getBroadcast(
-            this, 99999, finishIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        alarmManager.setExactAndAllowWhileIdle(
-            AlarmManager.ELAPSED_REALTIME_WAKEUP, currentTime + totalMillis, finishPendingIntent
-        )
-        pendingAlarms.add(finishPendingIntent)
     }
 
     private fun stopAllAlarms() {

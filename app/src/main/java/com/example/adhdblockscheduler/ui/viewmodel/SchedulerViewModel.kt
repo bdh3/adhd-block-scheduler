@@ -235,8 +235,6 @@ class SchedulerViewModel(
         ) }
         
         generateDefaultBlocks(_uiState.value.alarmIntervalMinutes, schedule.durationMinutes)
-        
-        // v1.3.0: 자동으로 startTimer()를 호출하지 않고 사용자의 입력을 대기합니다.
     }
 
     fun startNewSession(taskTitle: String, totalMinutes: Int, hourOfDay: Int? = null) {
@@ -380,6 +378,7 @@ class SchedulerViewModel(
                 remainingSeconds = intervalSeconds,
                 totalRemainingSeconds = newTotalRemainingSeconds
             ) }
+            // 서비스에 즉시 반영
             timerService?.startTimer(newTotalRemainingSeconds)
         } else {
             val task = state.tasks.find { it.id == state.selectedTaskId }

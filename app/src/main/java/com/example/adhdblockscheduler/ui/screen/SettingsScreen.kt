@@ -1,12 +1,20 @@
 package com.example.adhdblockscheduler.ui.screen
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.adhdblockscheduler.BuildConfig
 import com.example.adhdblockscheduler.ui.viewmodel.SchedulerViewModel
 import kotlin.math.abs
@@ -76,73 +84,163 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                     
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // 전략 프리셋 버튼
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        FilterChip(
-                            selected = restMinutes == 0,
-                            onClick = { alarmInterval = 15; restMinutes = 0 },
-                            label = { Text("연속 집중") }
-                        )
-                        FilterChip(
-                            selected = alarmInterval == 25 && restMinutes == 5,
-                            onClick = { alarmInterval = 25; restMinutes = 5 },
-                            label = { Text("25/5") }
-                        )
-                        FilterChip(
-                            selected = alarmInterval == 50 && restMinutes == 10,
-                            onClick = { alarmInterval = 50; restMinutes = 10 },
-                            label = { Text("50/10") }
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    if (restMinutes == 0) {
-                        Text("알람 주기", style = MaterialTheme.typography.labelMedium)
+                    // 2. 모드 선택 (탭 스타일)
+                    var isCycleMode by remember { mutableStateOf(restMinutes > 0) }
+                    
+                    Column {
+                        Text("집중 방식", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(8.dp))
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(42.dp)
+                                .clip(MaterialTheme.shapes.medium)
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .padding(2.dp)
                         ) {
-                            listOf(5, 10, 15, 30).forEach { interval ->
-                                FilterChip(
-                                    selected = alarmInterval == interval,
-                                    onClick = { alarmInterval = interval },
-                                    label = { Text("${interval}분") }
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .clip(MaterialTheme.shapes.medium)
+                                    .background(if (!isCycleMode) MaterialTheme.colorScheme.primary else Color.Transparent)
+                                    .clickable { 
+                                        isCycleMode = false
+                                        alarmInterval = 15
+                                        restMinutes = 0
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    "연속 집중", 
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = if (!isCycleMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .clip(MaterialTheme.shapes.medium)
+                                    .background(if (isCycleMode) MaterialTheme.colorScheme.primary else Color.Transparent)
+                                    .clickable { 
+                                        isCycleMode = true
+                                        if (restMinutes == 0) {
+                                            alarmInterval = 25
+                                            restMinutes = 5
+                                        }
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    "인터벌 사이클", 
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = if (isCycleMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
-                    } else {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("집중: ${alarmInterval}분", modifier = Modifier.width(80.dp), style = MaterialTheme.typography.bodyMedium)
-                            Slider(
-                                value = alarmInterval.toFloat(),
-                                onValueChange = { 
-                                    alarmInterval = it.toInt().coerceIn(5, 59)
-                                    restMinutes = getValidRestFor60(alarmInterval, restMinutes)
-                                },
-                                valueRange = 5f..59f,
-                                modifier = Modifier.weight(1f),
-                                steps = 54 // 59 - 5 = 54 steps for 1-minute increments
-                            )
-                        }
+                    }
 
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("휴식: ${restMinutes}분", modifier = Modifier.width(80.dp), style = MaterialTheme.typography.bodyMedium)
-                            Slider(
-                                value = restMinutes.toFloat(),
-                                onValueChange = { 
-                                    val requestedRest = it.toInt().coerceAtLeast(1)
-                                    val targetSum = divisorsOf60.filter { d -> d > alarmInterval }
-                                        .minByOrNull { d -> abs((d - alarmInterval) - requestedRest) } ?: 60
-                                    restMinutes = targetSum - alarmInterval
-                                },
-                                valueRange = 1f..(60 - alarmInterval).toFloat(),
-                                modifier = Modifier.weight(1f),
-                                steps = (60 - alarmInterval - 1).coerceAtLeast(0)
-                            )
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // 3. 상세 설정 영역
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                        shape = MaterialTheme.shapes.medium,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            if (!isCycleMode) {
+                                // 연속 집중 모드
+                                Text("알람 주기 (일정 시간마다 리마인드)", style = MaterialTheme.typography.labelMedium)
+                                Spacer(Modifier.height(8.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    listOf(5, 10, 15, 30).forEach { interval ->
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(40.dp)
+                                                .clip(MaterialTheme.shapes.small)
+                                                .background(if (alarmInterval == interval) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
+                                                .clickable { alarmInterval = interval },
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                "${interval}분",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = if (alarmInterval == interval) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+                                    }
+                                }
+                            } else {
+                                // 인터벌 사이클 모드
+                                Text("빠른 프리셋", style = MaterialTheme.typography.labelMedium)
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 4.dp)) {
+                                    AssistChip(
+                                        onClick = { 
+                                            alarmInterval = 25
+                                            restMinutes = 5
+                                        },
+                                        label = { Text("25/5", fontSize = 12.sp) },
+                                        leadingIcon = { Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                    )
+                                    AssistChip(
+                                        onClick = { 
+                                            alarmInterval = 50
+                                            restMinutes = 10
+                                        },
+                                        label = { Text("50/10", fontSize = 12.sp) },
+                                        leadingIcon = { Icon(imageVector = Icons.Default.Star, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                    )
+                                }
+                                
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+                                
+                                Text("상세 값 수정", style = MaterialTheme.typography.labelMedium)
+                                Spacer(Modifier.height(8.dp))
+                                
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text("집중: ${alarmInterval}분", modifier = Modifier.width(80.dp), style = MaterialTheme.typography.bodyMedium)
+                                        Slider(
+                                            value = alarmInterval.toFloat(),
+                                            onValueChange = { 
+                                                alarmInterval = (it.toInt() / 5) * 5
+                                                restMinutes = getValidRestFor60(alarmInterval, restMinutes)
+                                            },
+                                            valueRange = 5f..55f,
+                                            modifier = Modifier.weight(1f),
+                                            steps = 9 // 5, 10, 15, ..., 55
+                                        )
+                                    }
+
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text("휴식: ${restMinutes}분", modifier = Modifier.width(80.dp), style = MaterialTheme.typography.bodyMedium)
+                                        Slider(
+                                            value = restMinutes.toFloat(),
+                                            onValueChange = { 
+                                                val requestedRest = it.toInt().coerceAtLeast(1)
+                                                val targetSum = divisorsOf60.filter { d -> d > alarmInterval }
+                                                    .minByOrNull { d -> abs((d - alarmInterval) - requestedRest) } ?: 60
+                                                restMinutes = targetSum - alarmInterval
+                                            },
+                                            valueRange = 1f..(60 - alarmInterval).toFloat(),
+                                            modifier = Modifier.weight(1f),
+                                            steps = (60 - alarmInterval - 1).coerceAtLeast(0)
+                                        )
+                                    }
+                                    Text(
+                                        "* 60분의 약수에 맞춰 자동 보정됩니다.", 
+                                        style = MaterialTheme.typography.labelSmall, 
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(start = 4.dp)
+                                    )
+                                }
+                            }
                         }
                     }
                 }

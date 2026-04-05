@@ -248,11 +248,21 @@ fun CalendarScreen(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     listOf(5, 10, 15, 30).forEach { interval ->
-                                        FilterChip(
-                                            selected = localInterval == interval,
-                                            onClick = { localInterval = interval },
-                                            label = { Text("${interval}분") }
-                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(40.dp)
+                                                .clip(MaterialTheme.shapes.small)
+                                                .background(if (localInterval == interval) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
+                                                .clickable { localInterval = interval },
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                "${interval}분",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = if (localInterval == interval) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
                                     }
                                 }
                             } else {

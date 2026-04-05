@@ -34,6 +34,7 @@ data class SchedulerUiState(
     val currentBlockIndex: Int = 0,
     val remainingSeconds: Int = 0,
     val isRunning: Boolean = false,
+    val isTimerActive: Boolean = false,
     val sessionTotalMinutes: Int = 60,
     val totalRemainingSeconds: Int = 0,
     val vibrationEnabled: Boolean = true,
@@ -102,15 +103,14 @@ class SchedulerViewModel(
 
             viewModelScope.launch {
                 timerService?.config?.collect { config ->
-                    if (config != null) {
-                        _uiState.update { it.copy(
-                            sessionTotalMinutes = config.totalSecondsAtStart / 60,
-                            activeSessionInterval = config.intervalMinutes,
-                            restMinutes = config.restMinutes,
-                            vibrationEnabled = config.vibrationEnabled,
-                            selectedTaskTitle = config.taskTitle
-                        ) }
-                    }
+                    _uiState.update { it.copy(
+                        isTimerActive = config != null,
+                        sessionTotalMinutes = config?.totalSecondsAtStart?.let { it / 60 } ?: it.sessionTotalMinutes,
+                        activeSessionInterval = config?.intervalMinutes ?: it.activeSessionInterval,
+                        restMinutes = config?.restMinutes ?: it.restMinutes,
+                        vibrationEnabled = config?.vibrationEnabled ?: it.vibrationEnabled,
+                        selectedTaskTitle = config?.taskTitle ?: it.selectedTaskTitle
+                    ) }
                 }
             }
         }
@@ -197,9 +197,22 @@ class SchedulerViewModel(
         val todayTasks = params[6] as List<Task>
 
         val isSessionActive = state.isRunning || (state.totalRemainingSeconds > 0)
+        val isTimerActive = state.isTimerActive
         
-        // 타이머 탭에서는 항상 '오늘'의 작업 + 현재 선택된 작업을 노출
-        val timerTabTasks = if (state.selectedTaskId != null && todayTasks.none { it.id == state.selectedTaskId }) {
+        // 타이머 탭에서 세션 활성/일시정지 중이면 진행 중인 작업만 노출 (버그 1 수정)
+        val timerTabTasks = if (isTimerActive && state.selectedTaskId != null) {
+            val activeTask = todayTasks.find { it.id == state.selectedTaskId } ?: 
+                allSchedules.find { "sched_${it.id}" == state.selectedTaskId }?.let { schedule ->
+                    Task(
+                        id = "sched_${schedule.id}",
+                        title = schedule.taskTitle,
+                        scheduledDateMillis = schedule.startTimeMillis,
+                        isCompleted = schedule.isCompleted,
+                        startTimeMillis = schedule.startTimeMillis
+                    )
+                }
+            if (activeTask != null) listOf(activeTask) else emptyList()
+        } else if (state.selectedTaskId != null && todayTasks.none { it.id == state.selectedTaskId }) {
             val selectedTask = allSchedules.find { "sched_${it.id}" == state.selectedTaskId }?.let { schedule ->
                 Task(
                     id = "sched_${schedule.id}",
@@ -424,11 +437,11 @@ class SchedulerViewModel(
     }
 
     fun selectTask(taskId: String?) {
-        val isSessionActive = _uiState.value.isRunning || (_uiState.value.totalRemainingSeconds > 0)
-        if (isSessionActive && _uiState.value.selectedTaskId != null) return
+        // 실제 타이머가 작동 중(진행/일시정지)일 때는 선택 변경 불가
+        if (_uiState.value.isTimerActive) return
 
         if (_uiState.value.selectedTaskId == taskId || taskId == null) {
-            // Unselecting or selecting null
+            // 이미 선택된 작업을 다시 누르면 선택 취소 (버그 3 수정)
             _uiState.update { it.copy(
                 selectedTaskId = null,
                 selectedTaskTitle = null,
@@ -514,6 +527,7 @@ class SchedulerViewModel(
         timerService?.stopTimer()
         _uiState.update { it.copy(
             isRunning = false,
+            isTimerActive = false,
             totalRemainingSeconds = 0,
             currentBlockIndex = 0,
             remainingSeconds = 0,
@@ -630,6 +644,7 @@ class SchedulerViewModel(
         }
         _uiState.update { it.copy(
             isRunning = false,
+            isTimerActive = false,
             totalRemainingSeconds = 0,
             currentBlockIndex = 0,
             remainingSeconds = 0,
@@ -702,7 +717,7 @@ class SchedulerViewModel(
     }
 
     fun clearSelectionIfNotActive() {
-        if (!_uiState.value.isRunning && _uiState.value.totalRemainingSeconds <= 0) {
+        if (!_uiState.value.isTimerActive) {
             _uiState.update { it.copy(
                 selectedTaskId = null,
                 selectedTaskTitle = null,

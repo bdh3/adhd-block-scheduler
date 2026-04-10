@@ -6,15 +6,15 @@ plugins {
 }
 
 android {
-    namespace = "com.example.adhdblockscheduler"
+    namespace = "com.focusflow.app"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.adhdblockscheduler"
+        applicationId = "com.focusflow.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 36
-        versionName = "1.5.0"
+        versionCode = 38
+        versionName = "1.6.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -83,6 +83,7 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.datastore.preferences)
+    implementation(libs.androidx.core.splashscreen)
 
     // Room for local database
     implementation(libs.room.runtime)

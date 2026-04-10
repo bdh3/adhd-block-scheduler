@@ -4,25 +4,37 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- 흐름을 상징하는 원형 화살표 (Flow) -->
+    <!-- 부드러운 몰입의 흐름(Flow)을 상징하는 물결 모양 원형 배경 -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M54,20c-18.8,0-34,15.2-34,34s15.2,34,34,34s34-15.2,34-34h-4c0,16.6-13.4,30-30,30s-30-13.4-30-30s13.4-30,30-30c8.3,0,15.8,3.4,21.2,8.8L65,33h15V18l-5.4,5.4C68.3,17.1,54,12.1,54,20z"/>
+        android:pathData="M54,54m-42,0a42,42 0,1 1,84 0a42,42 0,1 1,-84 0"
+        android:fillAlpha="0.15"/>
 
-    <!-- 집중 블록을 상징하는 중앙의 둥근 사각형 (Block) -->
+    <!-- 메인 로고: 물방울과 블록의 조화 (Focus + Flow) -->
+    <!-- '시간의 흐름'을 상징하는 그라데이션 느낌의 곡선 -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M44,44h20v20h-20z"
-        android:strokeWidth="2"
+        android:pathData="M30,54c0,-13.25 10.75,-24 24,-24s24,10.75 24,24s-10.75,24 -24,24s-24,-10.75 -24,-24"
+        android:strokeWidth="6"
         android:strokeColor="#FFFFFF"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"/>
+        android:strokeLineCap="round"/>
 
-    <!-- 보조 블록 (작은 흐름의 조각들) -->
+    <!-- '블록'을 상징하는 중앙의 정교한 사각형 -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M48,36h12v4h-12z" />
+        android:pathData="M46,46h16v16h-16z"/>
+
+    <!-- 몰입이 퍼져나가는 듯한 포인트 점들 -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M48,68h12v4h-12z" />
+        android:pathData="M54,22a3,3 0,1 1,0 6a3,3 0,1 1,0 -6"/>
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,80a3,3 0,1 1,0 6a3,3 0,1 1,0 -6"/>
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M84,54a3,3 0,1 1,-6 0a3,3 0,1 1,6 0"/>
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M30,54a3,3 0,1 1,-6 0a3,3 0,1 1,6 0"/>
+
 </vector>

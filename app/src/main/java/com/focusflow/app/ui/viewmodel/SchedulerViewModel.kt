@@ -842,8 +842,8 @@ class SchedulerViewModel(
             settingsRepository.setDarkMode(darkMode)
 
             _uiState.update { it.copy(
-                alarmIntervalMinutes = interval,
-                restMinutes = rest,
+                alarmIntervalMinutes = if (!it.isTimerActive) interval else it.alarmIntervalMinutes,
+                restMinutes = if (!it.isTimerActive) rest else it.restMinutes,
                 vibrationEnabled = vibration,
                 soundEnabled = sound,
                 calendarSyncEnabled = calendarSync,
@@ -858,6 +858,69 @@ class SchedulerViewModel(
                 storedAlarmIntervalMinutes = interval,
                 storedRestMinutes = rest
             ) }
+        }
+    }
+
+    fun setDarkMode(mode: Int) {
+        viewModelScope.launch {
+            settingsRepository.setDarkMode(mode)
+            _uiState.update { it.copy(darkMode = mode) }
+        }
+    }
+
+    fun setVibrationEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setVibrationEnabled(enabled)
+            _uiState.update { it.copy(vibrationEnabled = enabled) }
+        }
+    }
+
+    fun setSoundEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setSoundEnabled(enabled)
+            _uiState.update { it.copy(soundEnabled = enabled) }
+        }
+    }
+
+    fun setFocusVibrationPattern(id: String) {
+        viewModelScope.launch {
+            settingsRepository.setFocusVibrationPatternId(id)
+            _uiState.update { it.copy(focusVibrationPatternId = id) }
+        }
+    }
+
+    fun setRestVibrationPattern(id: String) {
+        viewModelScope.launch {
+            settingsRepository.setRestVibrationPatternId(id)
+            _uiState.update { it.copy(restVibrationPatternId = id) }
+        }
+    }
+
+    fun setFinishVibrationPattern(id: String) {
+        viewModelScope.launch {
+            settingsRepository.setFinishVibrationPatternId(id)
+            _uiState.update { it.copy(finishVibrationPatternId = id) }
+        }
+    }
+
+    fun setFocusSound(id: String) {
+        viewModelScope.launch {
+            settingsRepository.setFocusSoundId(id)
+            _uiState.update { it.copy(focusSoundId = id) }
+        }
+    }
+
+    fun setRestSound(id: String) {
+        viewModelScope.launch {
+            settingsRepository.setRestSoundId(id)
+            _uiState.update { it.copy(restSoundId = id) }
+        }
+    }
+
+    fun setFinishSound(id: String) {
+        viewModelScope.launch {
+            settingsRepository.setFinishSoundId(id)
+            _uiState.update { it.copy(finishSoundId = id) }
         }
     }
 

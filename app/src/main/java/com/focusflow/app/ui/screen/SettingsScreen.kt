@@ -52,10 +52,14 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
     var darkMode by remember { mutableIntStateOf(uiState.darkMode) }
     var fontSizeScale by remember { mutableFloatStateOf(uiState.fontSizeScale) }
 
-    LaunchedEffect(uiState.storedAlarmIntervalMinutes, uiState.storedRestMinutes, uiState.defaultTotalMinutes, uiState.vibrationEnabled, uiState.soundEnabled, uiState.focusVibrationPatternId, uiState.restVibrationPatternId, uiState.finishVibrationPatternId, uiState.focusSoundId, uiState.restSoundId, uiState.finishSoundId, uiState.darkMode, uiState.fontSizeScale) {
+    // 저장된 설정값들이 외부(DB)에서 변경되었을 때만 로컬 편집 상태를 동기화합니다.
+    LaunchedEffect(uiState.storedAlarmIntervalMinutes, uiState.storedRestMinutes, uiState.defaultTotalMinutes) {
         alarmInterval = uiState.storedAlarmIntervalMinutes
         restMinutes = uiState.storedRestMinutes
         defaultTotalMinutes = uiState.defaultTotalMinutes
+    }
+
+    LaunchedEffect(uiState.vibrationEnabled, uiState.soundEnabled, uiState.focusVibrationPatternId, uiState.restVibrationPatternId, uiState.finishVibrationPatternId, uiState.focusSoundId, uiState.restSoundId, uiState.finishSoundId, uiState.darkMode, uiState.fontSizeScale) {
         vibrationEnabled = uiState.vibrationEnabled
         soundEnabled = uiState.soundEnabled
         focusPatternId = uiState.focusVibrationPatternId
@@ -337,7 +341,10 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                 trailingContent = {
                     Switch(
                         checked = soundEnabled,
-                        onCheckedChange = { soundEnabled = it }
+                        onCheckedChange = { 
+                            soundEnabled = it
+                            viewModel.setSoundEnabled(it)
+                        }
                     )
                 }
             )
@@ -355,6 +362,7 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                             selectedId = focusSoundId,
                             onSelected = { 
                                 focusSoundId = it
+                                viewModel.setFocusSound(it)
                                 viewModel.previewSound(it)
                             }
                         )
@@ -365,6 +373,7 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                             selectedId = restSoundId,
                             onSelected = { 
                                 restSoundId = it
+                                viewModel.setRestSound(it)
                                 viewModel.previewSound(it)
                             }
                         )
@@ -375,6 +384,7 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                             selectedId = finishSoundId,
                             onSelected = { 
                                 finishSoundId = it
+                                viewModel.setFinishSound(it)
                                 viewModel.previewSound(it)
                             }
                         )
@@ -388,7 +398,10 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                 trailingContent = {
                     Switch(
                         checked = vibrationEnabled,
-                        onCheckedChange = { vibrationEnabled = it }
+                        onCheckedChange = { 
+                            vibrationEnabled = it
+                            viewModel.setVibrationEnabled(it)
+                        }
                     )
                 }
             )
@@ -406,6 +419,7 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                             selectedId = focusPatternId,
                             onSelected = { 
                                 focusPatternId = it
+                                viewModel.setFocusVibrationPattern(it)
                                 viewModel.previewVibration(it)
                             },
                         )
@@ -416,6 +430,7 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                             selectedId = restPatternId,
                             onSelected = { 
                                 restPatternId = it
+                                viewModel.setRestVibrationPattern(it)
                                 viewModel.previewVibration(it)
                             },
                         )
@@ -426,6 +441,7 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                             selectedId = finishPatternId,
                             onSelected = { 
                                 finishPatternId = it
+                                viewModel.setFinishVibrationPattern(it)
                                 viewModel.previewVibration(it)
                             },
                         )
@@ -465,7 +481,7 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                                 .background(if (darkMode == index) MaterialTheme.colorScheme.primary else Color.Transparent)
                                 .clickable { 
                                     darkMode = index
-                                    viewModel.saveSettings(alarmInterval, restMinutes, vibrationEnabled, soundEnabled, uiState.calendarSyncEnabled, focusPatternId, restPatternId, finishPatternId, focusSoundId, restSoundId, finishSoundId, defaultTotalMinutes, index)
+                                    viewModel.setDarkMode(index)
                                 },
                             contentAlignment = Alignment.Center
                         ) {
@@ -507,7 +523,7 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                                 .height(32.dp)
                                 .clip(MaterialTheme.shapes.medium)
                                 .background(if (fontSizeScale == scale) MaterialTheme.colorScheme.primary else Color.Transparent)
-                                .clickable { 
+                                .clickable {
                                     fontSizeScale = scale
                                     viewModel.setFontSizeScale(scale)
                                 },

@@ -290,7 +290,8 @@ fun TimerHeader(
                 Button(
                     onClick = onToggleTimer,
                     modifier = Modifier.weight(1.2f),
-                    shape = MaterialTheme.shapes.medium
+                    shape = MaterialTheme.shapes.medium,
+                    contentPadding = PaddingValues(horizontal = 4.dp)
                 ) {
                     val isSessionActive = totalRemainingSeconds > 0 && totalRemainingSeconds < 3600*24
                     val totalSecs = sessionTotalMinutes * 60
@@ -304,7 +305,8 @@ fun TimerHeader(
                             isSessionActive -> "재개"
                             else -> "시작"
                         },
-                        maxLines = 1
+                        maxLines = 1,
+                        softWrap = false
                     )
                 }
                 
@@ -313,9 +315,10 @@ fun TimerHeader(
                         onClick = onStopTimer,
                         modifier = Modifier.weight(0.7f),
                         shape = MaterialTheme.shapes.medium,
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                        contentPadding = PaddingValues(horizontal = 4.dp)
                     ) {
-                        Text("중지", maxLines = 1)
+                        Text("중지", maxLines = 1, softWrap = false)
                     }
                 }
 
@@ -323,9 +326,10 @@ fun TimerHeader(
                     OutlinedButton(
                         onClick = onSkip,
                         modifier = Modifier.weight(0.8f),
-                        shape = MaterialTheme.shapes.medium
+                        shape = MaterialTheme.shapes.medium,
+                        contentPadding = PaddingValues(horizontal = 4.dp)
                     ) {
-                        Text(text = "넘기기", maxLines = 1)
+                        Text(text = "넘기기", maxLines = 1, softWrap = false)
                     }
                 }
             }

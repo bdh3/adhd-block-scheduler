@@ -625,7 +625,9 @@ fun CalendarScreen(
                         Spacer(Modifier.width(8.dp))
                         Button(onClick = {
                             editingSchedule?.let { 
-                                viewModel.loadScheduledSession(it)
+                                // 변경사항 저장 후 실행
+                                viewModel.updateSchedule(it, taskTitle, durationMinutes)
+                                viewModel.loadScheduledSession(it.copy(taskTitle = taskTitle, durationMinutes = durationMinutes))
                                 onNavigateToTimer()
                             }
                             editingSchedule = null

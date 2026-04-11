@@ -45,14 +45,7 @@ android {
         }
     }
 
-    /*
-    applicationVariants.all {
-        outputs.all {
-            val output = this as com.android.build.gradle.internal.api.BaseVariantOutputImpl
-            output.outputFileName = "FocusFlow_v${versionName}.apk"
-        }
-    }
-    */
+    // Remove old naming logic
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -70,7 +63,11 @@ android {
 
 androidComponents {
     onVariants { variant ->
-        // AGP 8.x+ APK renaming often needs to use the artifacts API or simple property overrides
+        variant.outputs.forEach { output ->
+            if (output is com.android.build.api.variant.impl.VariantOutputImpl) {
+                // For AGP 8.x, you can try setting the outputFileName directly if it's available
+            }
+        }
     }
 }
 

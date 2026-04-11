@@ -4,8 +4,10 @@ import android.app.AlarmManager
 import android.app.Notification
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.os.Binder
 import android.os.IBinder
 import android.os.PowerManager
@@ -74,6 +76,15 @@ class TimerService : Service() {
     private var targetEndTimeMillis: Long = 0
     private val pendingAlarms = mutableListOf<PendingIntent>()
 
+    private val screenStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                Intent.ACTION_SCREEN_OFF -> stopDisplayUpdateLoop()
+                Intent.ACTION_SCREEN_ON -> startDisplayUpdateLoop()
+            }
+        }
+    }
+
     inner class TimerBinder : Binder() {
         fun getService(): TimerService = this@TimerService
     }
@@ -83,6 +94,12 @@ class TimerService : Service() {
         val powerManager = getSystemService(POWER_SERVICE) as PowerManager
         wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "FocusFlow::TimerWakeLock")
         alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_SCREEN_OFF)
+        }
+        registerReceiver(screenStateReceiver, filter)
     }
 
     override fun onBind(intent: Intent?): IBinder = binder
@@ -99,20 +116,11 @@ class TimerService : Service() {
     }
 
     fun setTimerConfig(
-        interval: Int,
-        rest: Int,
-        totalSec: Int,
-        title: String,
-        vibrate: Boolean,
-        sound: Boolean,
-        focusPatternId: String,
-        restPatternId: String,
-        finishPatternId: String,
-        focusSound: String,
-        restSound: String,
-        finishSound: String,
-        onTransition: (String, Int, Boolean, BlockType) -> Unit,
-        onFinished: () -> Unit
+        interval: Int, rest: Int, totalSec: Int, title: String, 
+        vibrate: Boolean, sound: Boolean, focusPatternId: String, 
+        restPatternId: String, finishPatternId: String, focusSound: String, 
+        restSound: String, finishSound: String, 
+        onTransition: (String, Int, Boolean, BlockType) -> Unit, onFinished: () -> Unit
     ) {
         this.alarmIntervalMinutes = interval
         this.restMinutes = rest
@@ -137,54 +145,30 @@ class TimerService : Service() {
     }
 
     fun startTimer(initialTotalRemaining: Int) {
-        stopAllAlarms() // 기존 알람 취소
+        stopAllAlarms()
         timerJob?.cancel()
         _isRunning.value = true
         
-        val focusSeconds = alarmIntervalMinutes * 60
-        val restSeconds = restMinutes * 60
-        val cycleSeconds = focusSeconds + restSeconds
-        
         val initialElapsedSeconds = totalSecondsAtStart - initialTotalRemaining
-        
-        // 초기 인덱스 계산 (사이클 고려)
-        _currentBlockIndex.value = if (restSeconds <= 0) {
-            if (focusSeconds > 0) initialElapsedSeconds / focusSeconds else 0
-        } else {
-            val cycleIdx = initialElapsedSeconds / cycleSeconds
-            val offsetInCycle = initialElapsedSeconds % cycleSeconds
-            if (offsetInCycle < focusSeconds) (cycleIdx * 2) else (cycleIdx * 2 + 1)
-        }
-
         targetEndTimeMillis = SystemClock.elapsedRealtime() + (initialTotalRemaining * 1000L)
         _totalRemainingSeconds.value = initialTotalRemaining
         
-        wakeLock?.acquire(initialTotalRemaining * 1000L + 60000L) 
         startForeground(NotificationHelper.NOTIFICATION_ID, createSilentForegroundNotification())
-
-        // AlarmManager에 중간 알람들 예약
         scheduleAllAlarms(initialTotalRemaining)
 
-        // 세션 시작 시 즉시 알람 발생 (처음 시작할 때만)
         if (initialElapsedSeconds == 0) {
             onTransition("$taskTitle (집중 시작)", 0, false, BlockType.FOCUS)
         }
 
-        timerJob = serviceScope.launch {
-            // 첫 번째 정수 초를 즉시 반영하여 1초 지연 현상 방지
-            _totalRemainingSeconds.value = initialTotalRemaining
-            
-            val initialBlockRemaining = if (restSeconds <= 0) {
-                focusSeconds - (initialElapsedSeconds % focusSeconds)
-            } else {
-                val offset = initialElapsedSeconds % cycleSeconds
-                if (offset < focusSeconds) focusSeconds - offset else cycleSeconds - offset
-            }
-            _remainingSeconds.value = initialBlockRemaining.toInt()
+        startDisplayUpdateLoop()
+    }
 
-            while (true) {
-                delay(1000L) 
-                
+    private fun startDisplayUpdateLoop() {
+        if (!_isRunning.value) return
+        timerJob?.cancel()
+        
+        timerJob = serviceScope.launch {
+            while (isActive) {
                 val now = SystemClock.elapsedRealtime()
                 val remainingMillis = targetEndTimeMillis - now
                 
@@ -192,40 +176,58 @@ class TimerService : Service() {
                 
                 val currentTotalRemaining = ((remainingMillis + 500) / 1000).toInt()
                 _totalRemainingSeconds.value = currentTotalRemaining
+                updateTimeStates(currentTotalRemaining)
                 
-                val sessionElapsedSeconds = totalSecondsAtStart - currentTotalRemaining
-                
-                val (newBlockIndex, currentBlockRemaining) = if (restSeconds <= 0) {
-                    val idx = sessionElapsedSeconds / focusSeconds
-                    val rem = focusSeconds - (sessionElapsedSeconds % focusSeconds)
-                    idx to rem
-                } else {
-                    val cycleIdx = sessionElapsedSeconds / cycleSeconds
-                    val offsetInCycle = sessionElapsedSeconds % cycleSeconds
-                    if (offsetInCycle < focusSeconds) {
-                        (cycleIdx * 2) to (focusSeconds - offsetInCycle)
-                    } else {
-                        (cycleIdx * 2 + 1) to (cycleSeconds - offsetInCycle)
-                    }
-                }
-                
-                if (newBlockIndex != _currentBlockIndex.value && currentTotalRemaining > 0) {
-                    _currentBlockIndex.value = newBlockIndex
-                }
-                _remainingSeconds.value = currentBlockRemaining.toInt()
+                delay(1000L) 
             }
 
-            // 완료 처리
-            _totalRemainingSeconds.value = 0
-            _remainingSeconds.value = 0
-            _isRunning.value = false
-            
-            val totalElapsedMinutes = totalSecondsAtStart / 60
-            onTransition(taskTitle, totalElapsedMinutes, true, BlockType.FOCUS)
-            
-            delay(500L) // UI 업데이트 대기
+            if (_isRunning.value && SystemClock.elapsedRealtime() >= targetEndTimeMillis) {
+                handleTimerFinished()
+            }
+        }
+    }
+
+    private fun stopDisplayUpdateLoop() {
+        timerJob?.cancel()
+    }
+
+    private fun updateTimeStates(currentTotalRemaining: Int) {
+        val focusSeconds = alarmIntervalMinutes * 60
+        val restSeconds = restMinutes * 60
+        val cycleSeconds = focusSeconds + restSeconds
+        val sessionElapsedSeconds = totalSecondsAtStart - currentTotalRemaining
+
+        val (newBlockIndex, currentBlockRemaining) = if (restSeconds <= 0) {
+            val idx = sessionElapsedSeconds / focusSeconds
+            val rem = focusSeconds - (sessionElapsedSeconds % focusSeconds)
+            idx to rem
+        } else {
+            val cycleIdx = sessionElapsedSeconds / cycleSeconds
+            val offsetInCycle = sessionElapsedSeconds % cycleSeconds
+            if (offsetInCycle < focusSeconds) {
+                (cycleIdx * 2) to (focusSeconds - offsetInCycle)
+            } else {
+                (cycleIdx * 2 + 1) to (cycleSeconds - offsetInCycle)
+            }
+        }
+        
+        if (newBlockIndex != _currentBlockIndex.value && currentTotalRemaining > 0) {
+            _currentBlockIndex.value = newBlockIndex
+        }
+        _remainingSeconds.value = currentBlockRemaining.toInt()
+    }
+
+    private fun handleTimerFinished() {
+        _totalRemainingSeconds.value = 0
+        _remainingSeconds.value = 0
+        _isRunning.value = false
+        
+        val totalElapsedMinutes = totalSecondsAtStart / 60
+        onTransition(taskTitle, totalElapsedMinutes, true, BlockType.FOCUS)
+        
+        serviceScope.launch {
+            delay(500L) 
             onFinished()
-            releaseWakeLock()
             stopForeground(true)
             stopSelf()
         }
@@ -233,43 +235,29 @@ class TimerService : Service() {
 
     private fun scheduleAllAlarms(initialRemainingSeconds: Int) {
         stopAllAlarms()
-        
         val focusSeconds = alarmIntervalMinutes * 60
         val restSeconds = restMinutes * 60
         val cycleSeconds = focusSeconds + restSeconds
         val currentTime = SystemClock.elapsedRealtime()
-        
         var elapsedAtNextAlarm = (totalSecondsAtStart - initialRemainingSeconds).toLong()
         
-        // 다음 알람 시점들을 순차적으로 계산하여 예약
         while (true) {
-            val cycleIdx = (elapsedAtNextAlarm / cycleSeconds).toInt()
             val offsetInCycle = (elapsedAtNextAlarm % cycleSeconds).toInt()
-            
-            val secondsUntilNextBoundary = if (restSeconds <= 0) {
-                focusSeconds - offsetInCycle
-            } else {
-                if (offsetInCycle < focusSeconds) focusSeconds - offsetInCycle
-                else cycleSeconds - offsetInCycle
-            }
+            val secondsUntilNextBoundary = if (restSeconds <= 0) focusSeconds - (offsetInCycle % focusSeconds)
+            else if (offsetInCycle < focusSeconds) focusSeconds - offsetInCycle
+            else cycleSeconds - offsetInCycle
             
             elapsedAtNextAlarm += secondsUntilNextBoundary
             if (elapsedAtNextAlarm >= totalSecondsAtStart) break
             
-            val totalRemainingAtAlarm = (totalSecondsAtStart - elapsedAtNextAlarm).toInt()
             val nextAlarmTime = currentTime + ((elapsedAtNextAlarm - (totalSecondsAtStart - initialRemainingSeconds)) * 1000L)
-
-            val intent = Intent(this, com.focusflow.app.service.TimerAlarmReceiver::class.java).apply {
+            val intent = Intent(this, TimerAlarmReceiver::class.java).apply {
                 val currentInx = pendingAlarms.size
                 val currentBlockType = if (restSeconds <= 0) BlockType.FOCUS 
                                        else if (currentInx % 2 == 0) BlockType.REST 
                                        else BlockType.FOCUS
-                
-                val nextBlockLabel = if (restSeconds <= 0) "집중" 
-                                    else if (currentInx % 2 == 0) "휴식 시작" 
-                                    else "집중 재개"
-                
-                putExtra("taskTitle", "$taskTitle ($nextBlockLabel)")
+                val nextLabel = if (restSeconds <= 0) "집중" else if (currentInx % 2 == 0) "휴식 시작" else "집중 재개"
+                putExtra("taskTitle", "$taskTitle ($nextLabel)")
                 putExtra("elapsedMinutes", (elapsedAtNextAlarm / 60).toInt())
                 putExtra("isFinished", false)
                 putExtra("vibrationEnabled", vibrationEnabled)
@@ -282,24 +270,19 @@ class TimerService : Service() {
                 putExtra("restSoundId", restSoundId)
                 putExtra("finishSoundId", finishSoundId)
             }
-            
-            val pendingIntent = PendingIntent.getBroadcast(
-                this, elapsedAtNextAlarm.toInt(), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            
+            val pendingIntent = PendingIntent.getBroadcast(this, elapsedAtNextAlarm.toInt(), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
             alarmManager.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, nextAlarmTime, pendingIntent)
             pendingAlarms.add(pendingIntent)
         }
 
-        // 3. 최종 종료 알람 예약 (남은 시간이 0보다 클 때만)
         if (initialRemainingSeconds > 0) {
-            val finishIntent = Intent(this, com.focusflow.app.service.TimerAlarmReceiver::class.java).apply {
+            val finishIntent = Intent(this, TimerAlarmReceiver::class.java).apply {
                 putExtra("taskTitle", taskTitle)
                 putExtra("elapsedMinutes", totalSecondsAtStart / 60)
                 putExtra("isFinished", true)
                 putExtra("vibrationEnabled", vibrationEnabled)
                 putExtra("soundEnabled", soundEnabled)
-                putExtra("blockType", BlockType.FOCUS.name) // Type doesn't matter much for finish
+                putExtra("blockType", BlockType.FOCUS.name)
                 putExtra("focusVibrationPatternId", focusVibrationPatternId)
                 putExtra("restVibrationPatternId", restVibrationPatternId)
                 putExtra("finishVibrationPatternId", finishVibrationPatternId)
@@ -307,13 +290,9 @@ class TimerService : Service() {
                 putExtra("restSoundId", restSoundId)
                 putExtra("finishSoundId", finishSoundId)
             }
-            val finishPendingIntent = PendingIntent.getBroadcast(
-                this, 99999, finishIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            alarmManager.setExactAndAllowWhileIdle(
-                AlarmManager.ELAPSED_REALTIME_WAKEUP, currentTime + (initialRemainingSeconds * 1000L), finishPendingIntent
-            )
-            pendingAlarms.add(finishPendingIntent)
+            val finishPI = PendingIntent.getBroadcast(this, 99999, finishIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            alarmManager.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, currentTime + (initialRemainingSeconds * 1000L), finishPI)
+            pendingAlarms.add(finishPI)
         }
     }
 
@@ -328,51 +307,31 @@ class TimerService : Service() {
 
     fun pauseTimer() {
         stopAllAlarms()
-        timerJob?.cancel()
+        stopDisplayUpdateLoop()
         _isRunning.value = false
         releaseWakeLock()
         stopForeground(STOP_FOREGROUND_REMOVE)
     }
 
     fun skipToNext() {
-        val currentRemaining = _remainingSeconds.value
         val totalRemaining = _totalRemainingSeconds.value
-        
-        // 현재 남은 블록 시간만큼 전체 남은 시간에서 차감
+        val currentRemaining = _remainingSeconds.value
         val newTotalRemaining = (totalRemaining - currentRemaining).coerceAtLeast(0)
-        _totalRemainingSeconds.value = newTotalRemaining
         
         if (newTotalRemaining <= 0) {
-            val totalElapsedMinutes = totalSecondsAtStart / 60
-            onTransition(taskTitle, totalElapsedMinutes, true, BlockType.FOCUS)
             stopTimer()
-            onFinished()
+            handleTimerFinished()
             return
         }
 
-        // 다음 블록 인덱스로 이동
-        val nextIndex = _currentBlockIndex.value + 1
-        _currentBlockIndex.value = nextIndex
-        
-        // 다음 블록의 성격(집중/휴식) 결정: 짝수(0, 2, 4...) 집중, 홀수(1, 3, 5...) 휴식
-        val isRestNext = (restMinutes > 0) && (nextIndex % 2 != 0)
-        val nextInterval = if (isRestNext) restMinutes else alarmIntervalMinutes
-        
-        // 다음 블록의 시간 설정 (전체 남은 시간을 초과하지 않음)
-        _remainingSeconds.value = Math.min(nextInterval * 60, newTotalRemaining)
-        
-        // 타이머 재설정 및 재시작 (알람 재스케줄링 포함)
         startTimer(newTotalRemaining)
-        
-        // 상태 알림 전송 ("휴식 시작" 또는 "집중 재개")
-        val status = if (isRestNext) "휴식 시작" else "집중 재개"
-        val totalElapsedMinutes = (totalSecondsAtStart - newTotalRemaining) / 60
-        onTransition("$taskTitle ($status)", totalElapsedMinutes, false, if (isRestNext) BlockType.REST else BlockType.FOCUS)
+        val isRestNext = (restMinutes > 0) && ((_currentBlockIndex.value + 1) % 2 != 0)
+        onTransition("$taskTitle (${if (isRestNext) "휴식 시작" else "집중 재개"})", (totalSecondsAtStart - newTotalRemaining) / 60, false, if (isRestNext) BlockType.REST else BlockType.FOCUS)
     }
 
     fun stopTimer() {
         stopAllAlarms()
-        timerJob?.cancel()
+        stopDisplayUpdateLoop()
         _isRunning.value = false
         _totalRemainingSeconds.value = 0
         _currentBlockIndex.value = 0
@@ -384,8 +343,9 @@ class TimerService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        try { unregisterReceiver(screenStateReceiver) } catch (e: Exception) {}
         stopAllAlarms()
-        timerJob?.cancel()
+        stopDisplayUpdateLoop()
         releaseWakeLock()
     }
 }

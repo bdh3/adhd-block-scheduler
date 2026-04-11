@@ -28,27 +28,30 @@ jobs:
       run: |
         echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > app/focus-app.keystore
 
-    - name: Build Debug APK
-      run: ./gradlew assembleDebug
+    - name: Build Release APK
+      run: ./gradlew assembleRelease
+
+    - name: Extract Release Notes
+      id: extract_notes
+      run: |
+        NOTES=$(python3 .github/workflows/extract_release_notes.py)
+        echo "RELEASE_NOTES<<EOF" >> $GITHUB_OUTPUT
+        echo "$NOTES" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
 
     - name: Create Release and Upload APK
       uses: softprops/action-gh-release@v2
       with:
-        files: app/build/outputs/apk/debug/*.apk
+        files: app/build/outputs/apk/release/*.apk
         tag_name: ${{ github.ref_name }}
         name: Focus Flow ${{ github.ref_name }}
         body: |
           Focus Flow ${{ github.ref_name }} 버전이 출시되었습니다! 🚀
           
-          **주요 업데이트 내용:**
-          - 📅 **날짜별 작업 필터링**: 선택된 날짜의 작업만 타이머 목록에 표시
-          - 🛡️ **포그라운드 서비스**: 백그라운드 및 화면 꺼짐 상태에서도 끊김 없는 타이머 유지
-          - 🧩 **15분 블록 시스템**: 1시간을 4개로 쪼갠 직관적인 가로 배치 레이아웃
-          - 🎯 **단일 타이머 원칙**: 몰입 분산 방지를 위해 실행 중 타 작업 접근 제한
-          - 📅 **캘린더 자동 연동**: 세션 완료 시 시스템 캘린더에 정확한 시간 기록
-          - 📳 **단일 집중 모드**: '휴식' 개념 제거 및 집중 알림/진동 최적화
-          - 🛠️ **UI/UX 개선**: 설정 저장 로직 수정 및 타이머 리셋/스킵 로직 고도화
+          ### 📝 이번 버전의 주요 변경 사항
+          ${{ steps.extract_notes.outputs.RELEASE_NOTES }}
           
+          ---
           **설치 방법:**
           아래 Assets에서 APK 파일을 다운로드하여 설치해 주세요. 기존 앱이 설치되어 있다면 덮어쓰기로 업데이트됩니다.
         draft: false

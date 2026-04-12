@@ -48,7 +48,7 @@ class TimerService : Service() {
         val taskTitle: String,
         val vibrationEnabled: Boolean,
         val soundEnabled: Boolean,
-        val useFullScreenAlarm: Boolean = true,
+        val useFullScreenAlarm: Boolean = false,
         val focusVibrationPatternId: String = "focus_default",
         val restVibrationPatternId: String = "rest_default",
         val finishVibrationPatternId: String = "finish_triple",
@@ -66,7 +66,7 @@ class TimerService : Service() {
     private var taskTitle = ""
     private var vibrationEnabled = true
     private var soundEnabled = true
-    private var useFullScreenAlarm = true
+    private var useFullScreenAlarm = false
     private var focusVibrationPatternId = "focus_default"
     private var restVibrationPatternId = "rest_default"
     private var finishVibrationPatternId = "finish_triple"

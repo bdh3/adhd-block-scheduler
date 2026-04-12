@@ -127,7 +127,7 @@ class SettingsRepository(private val context: Context) {
 
     val useFullScreenAlarm: Flow<Boolean> = context.dataStore.data
         .map { preferences ->
-            preferences[USE_FULL_SCREEN_ALARM] ?: true
+            preferences[USE_FULL_SCREEN_ALARM] ?: false
         }
 
     suspend fun setCalendarSyncEnabled(enabled: Boolean) {

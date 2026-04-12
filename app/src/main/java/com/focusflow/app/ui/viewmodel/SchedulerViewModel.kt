@@ -55,7 +55,7 @@ data class SchedulerUiState(
     val defaultTotalMinutes: Int = 60,
     val darkMode: Int = 0,
     val fontSizeScale: Float = 1.0f,
-    val useFullScreenAlarm: Boolean = true,
+    val useFullScreenAlarm: Boolean = false,
     val focusRingtoneUri: String? = null,
     val restRingtoneUri: String? = null,
     val finishRingtoneUri: String? = null,

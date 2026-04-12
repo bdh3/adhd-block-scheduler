@@ -925,8 +925,7 @@ class SchedulerViewModel(
     }
 
     fun previewVibration(patternId: String) {
-        val pattern = VibrationPattern.fromId(patternId).pattern
-        notificationHelper.vibratePreview(pattern)
+        notificationHelper.vibratePreview(patternId)
     }
 
     fun previewSound(soundId: String) {

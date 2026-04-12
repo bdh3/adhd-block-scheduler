@@ -32,7 +32,7 @@ sealed class VibrationPattern(val id: String, val displayName: String, val patte
             }
         }
         fun getAllPatterns(): List<VibrationPattern> = listOf(
-            Default, FocusDefault, RestDefault, FinishTriple, ShortDouble, Simple, Warning, Rhythm
+            Default, FocusDefault, RestDefault, FinishTriple, Simple, ShortDouble, Rhythm, Warning
         )
     }
 }

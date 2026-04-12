@@ -141,39 +141,45 @@ class NotificationHelper(private val context: Context) {
                 stopSound() 
                 when (soundId) {
                     "focus_default", "focus_start" -> {
+                        // 집중: 경쾌한 상승 비프음
                         toneGenerator.startTone(ToneGenerator.TONE_PROP_ACK, 200)
                     }
                     "rest_default", "rest_start" -> {
+                        // 휴식: 부드러운 하강 비프음
                         toneGenerator.startTone(ToneGenerator.TONE_CDMA_PIP, 300)
                     }
                     "finish_default", "finish_start", "finish_triple" -> {
+                        // 종료: 기분 좋은 삼중 비프음
                         repeat(3) {
                             toneGenerator.startTone(ToneGenerator.TONE_PROP_BEEP, 100)
                             delay(250)
                         }
                     }
                     "warning" -> {
-                        toneGenerator.startTone(ToneGenerator.TONE_CDMA_ABBR_ALERT, 500)
+                        // 경고: 날카롭고 강한 비프음
+                        toneGenerator.startTone(ToneGenerator.TONE_CDMA_HIGH_L, 500)
                     }
                     "simple", "simple1" -> {
+                        // 심플1: 아주 짧은 클릭음
                         toneGenerator.startTone(ToneGenerator.TONE_PROP_PROMPT, 100)
                     }
                     "short_double", "simple2" -> {
+                        // 심플2: 짧은 이중 클릭음
                         toneGenerator.startTone(ToneGenerator.TONE_PROP_PROMPT, 80)
                         delay(150)
                         toneGenerator.startTone(ToneGenerator.TONE_PROP_PROMPT, 80)
                     }
                     "ringtone" -> {
+                        // 벨소리: 1회만 재생 (루핑 제거)
                         val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
                         ringtonePlayer = RingtoneManager.getRingtone(context, uri).apply {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) isLooping = true
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) isLooping = false
                             play()
                         }
                     }
                     else -> {
-                        val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-                        ringtonePlayer = RingtoneManager.getRingtone(context, uri)
-                        ringtonePlayer?.play()
+                        // 기본: 표준 알림음
+                        toneGenerator.startTone(ToneGenerator.TONE_PROP_BEEP2, 200)
                     }
                 }
             } catch (e: Exception) { e.printStackTrace() }

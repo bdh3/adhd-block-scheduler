@@ -188,6 +188,11 @@ class NotificationHelper(private val context: Context) {
         } catch (e: Exception) {}
     }
 
+    fun vibratePreview(patternId: String) {
+        val pattern = VibrationPattern.fromId(patternId).pattern
+        vibrate(pattern)
+    }
+
     fun vibrate(pattern: LongArray) {
         val vibrator = getVibrator()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

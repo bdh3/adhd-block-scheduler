@@ -222,11 +222,14 @@ class NotificationHelper private constructor(private val context: Context) {
 
         notificationManager.notify(ALARM_NOTIFICATION_ID, builder.build())
         
-        alertJob?.cancel() // 기존에 대기 중인 작업이 있다면 취소
+        alertJob?.cancel()
         alertJob = serviceScope.launch {
-            delay(500)
+            // [v1.7.6-fix] 전체 화면 알람(화면 꺼짐 대응)일 때는 지연 없이 즉시 소리 재생
+            // 팝업 알람일 때만 레이스 컨디션 방지를 위해 0.5초 지연
+            if (!forceFullScreen) {
+                delay(500)
+            }
             
-            // [v1.7.6-patch] 작업을 시작하기 전에 세션이 이미 중단되었는지 재확인
             if (!isLoopingActive && forceFullScreen) return@launch
 
             if (vibrationEnabled) {

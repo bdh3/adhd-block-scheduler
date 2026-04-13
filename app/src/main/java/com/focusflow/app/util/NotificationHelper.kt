@@ -21,6 +21,8 @@ import com.focusflow.app.ui.AlarmActivity
 import com.focusflow.app.ui.MainActivity
 import kotlinx.coroutines.*
 
+import com.focusflow.app.service.TimerService
+
 enum class BlockType { FOCUS, REST }
 
 class NotificationHelper private constructor(private val context: Context) {
@@ -42,8 +44,8 @@ class NotificationHelper private constructor(private val context: Context) {
     fun isAlarmRunning(): Boolean = isLoopingActive
 
     companion object {
-        // [v1.7.6-final] 채널 중요도 재설정을 위해 ID 변경
-        const val ALARM_HIGH_CHANNEL_ID = "focus_flow_alarm_v14_final"
+        // [v1.7.6-recovery] 채널 중요도 강제 초기화를 위해 ID 변경
+        const val ALARM_HIGH_CHANNEL_ID = "focus_flow_alarm_v14_emergency"
         const val SILENT_SERVICE_CHANNEL_ID = "focus_flow_service_v13"
         const val SERVICE_NOTIFICATION_ID = 1000
         const val ALARM_NOTIFICATION_ID = 2000 
@@ -165,7 +167,7 @@ class NotificationHelper private constructor(private val context: Context) {
         }
 
         // [v1.7.6-final] 알림에서 직접 중단할 수 있는 액션 추가 (잠금 화면 대응)
-        val stopIntent = android.content.Intent(context, com.focusflow.app.service.TimerService::class.java).apply {
+        val stopIntent = Intent(context, TimerService::class.java).apply {
             putExtra("stop_alarm", true)
             putExtra("isFinished", isFinished)
         }
@@ -199,37 +201,34 @@ class NotificationHelper private constructor(private val context: Context) {
 
         if (forceFullScreen) {
             builder.setPriority(NotificationCompat.PRIORITY_MAX)
+            
+            // [v1.7.6-recovery] 알림을 먼저 시스템에 등록하여 알람 상태임을 선포
+            notificationManager.notify(ALARM_NOTIFICATION_ID, builder.build())
+            
             startTimeoutCounter()
             
-            // [v1.7.6-final] 안드로이드 14+ 대응: 전체 화면 알람 권한 확인
-            val canUseFSI = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                notificationManager.canUseFullScreenIntent()
-            } else true
-
-            if (canUseFSI) {
-                try {
-                    val pm = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
-                    val wakeLock = pm.newWakeLock(
-                        android.os.PowerManager.FULL_WAKE_LOCK or
-                        android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP,
-                        "FocusFlow:AlarmWakeLock"
-                    )
-                    wakeLock.acquire(3000L) 
-
-                    // [v1.7.6-final] FSI가 실패할 경우를 대비해 직접 실행 병행
-                    // AlarmActivity에서 requestDismissKeyguard()를 호출하지 않으므로 패턴 창 없이 뜹니다.
-                    context.startActivity(alarmActivityIntent)
-                } catch (e: Exception) { 
-                    e.printStackTrace() 
-                }
+            // [v1.7.6-recovery] 권한 체크 없이 무조건 화면 깨우기 및 액티비티 실행 시도
+            try {
+                val pm = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+                val wakeLock = pm.newWakeLock(
+                    android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK or
+                    android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP or
+                    android.os.PowerManager.ON_AFTER_RELEASE,
+                    "FocusFlow:AlarmWakeLock"
+                )
+                wakeLock.acquire(5000L) 
+                
+                // 직접 실행 (패턴 창 소환 원인은 이미 제거됨)
+                context.startActivity(alarmActivityIntent)
+            } catch (e: Exception) { 
+                e.printStackTrace() 
             }
         } else {
             builder.setDefaults(0)
             builder.setSound(null)
             builder.setVibrate(longArrayOf(0))
+            notificationManager.notify(ALARM_NOTIFICATION_ID, builder.build())
         }
-
-        notificationManager.notify(ALARM_NOTIFICATION_ID, builder.build())
         
         alertJob?.cancel()
         alertJob = serviceScope.launch {

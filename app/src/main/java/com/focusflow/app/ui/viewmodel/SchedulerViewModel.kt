@@ -37,7 +37,7 @@ data class SchedulerUiState(
     val currentBlockIndex: Int = 0,
     val timeBlocks: List<TimeBlock> = emptyList(),
     val selectedTaskId: String? = null,
-    val selectedTaskTitle: String? = null,
+    val selectedTaskTitle: String? = "작업을 선택하세요",
     val currentScheduleId: String? = null,
     val recentStats: List<DailyStats> = emptyList(),
     val sessionTotalMinutes: Int = 60,
@@ -469,7 +469,7 @@ class SchedulerViewModel(
                     remainingSeconds = defIntervalSec,
                     currentBlockIndex = 0,
                     selectedTaskId = null,
-                    selectedTaskTitle = null,
+                    selectedTaskTitle = "작업을 선택하세요",
                     currentScheduleId = null,
                     timeBlocks = generateBlocks(currentState.storedAlarmIntervalMinutes, currentState.storedRestMinutes, defTotalSec)
                 )
@@ -615,7 +615,7 @@ class SchedulerViewModel(
                 isRunning = false,
                 isTimerActive = false,
                 selectedTaskId = null,
-                selectedTaskTitle = null,
+                selectedTaskTitle = "작업을 선택하세요",
                 currentScheduleId = null,
                 totalRemainingSeconds = defTotalSec,
                 remainingSeconds = defIntervalSec,
@@ -660,7 +660,7 @@ class SchedulerViewModel(
                 
                 state.copy(
                     selectedTaskId = null,
-                    selectedTaskTitle = null,
+                    selectedTaskTitle = "작업을 선택하세요",
                     currentScheduleId = null,
                     sessionTotalMinutes = defTotalMin,
                     alarmIntervalMinutes = defIntervalMin,

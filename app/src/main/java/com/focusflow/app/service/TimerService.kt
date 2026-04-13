@@ -259,8 +259,9 @@ class TimerService : Service() {
         
         delayedFinishJob = serviceScope.launch {
             // 알람이 울리는 동안(20초)은 서비스 상태를 유지하다가 자동 종료
-            delay(NotificationHelper.ALARM_TIMEOUT_MS + 5000)
+            delay(NotificationHelper.ALARM_TIMEOUT_MS + 2000) // 2초 여유
             if (!_isRunning.value) { // 그 사이에 유저가 다시 시작하지 않았다면
+                stopAllAlarms(true) // 노티피케이션 제거 및 사운드 정지 보장
                 stopServiceImmediately()
             }
         }
@@ -414,6 +415,7 @@ class TimerService : Service() {
         isServiceRunning = false
         stopAllAlarms(true)
         timerJob?.cancel()
+        delayedFinishJob?.cancel() // [v1.7.5-fix] 수동 중지 시 자동 종료 예약 작업도 즉시 취소
         _isRunning.value = false
         _totalRemainingSeconds.value = 0
         _config.value = null

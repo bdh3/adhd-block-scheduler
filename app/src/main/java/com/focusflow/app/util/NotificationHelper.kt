@@ -175,7 +175,8 @@ class NotificationHelper private constructor(private val context: Context) {
             .setFullScreenIntent(fullScreenPendingIntent, true)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
-            .setOngoing(forceFullScreen)
+            // [v1.7.5-fix] 종료 알림(isFinished)인 경우 ongoing을 해제하여 사용자가 밀어서 지울 수 있게 함
+            .setOngoing(forceFullScreen && !isFinished)
             // 잠금 화면에서도 내용을 "항상 표시"하도록 강제
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setLocalOnly(true)

@@ -59,7 +59,11 @@ class AlarmActivity : ComponentActivity() {
 
         lifecycleScope.launch {
             delay(NotificationHelper.ALARM_TIMEOUT_MS)
-            if (!isDestroyed) finish()
+            if (!isDestroyed) {
+                // [v1.7.4-fix] 타임아웃 시 소리/진동을 명시적으로 끄고 액티비티 종료
+                notificationHelper.stopAllAlerts()
+                finish()
+            }
         }
     }
 

@@ -303,8 +303,8 @@ class TimerService : Service() {
         // 최종 종료인지 구간 전환인지 확인
         val isFinalFinish = nextElapsed >= totalSecondsAtStart
         val actualNextElapsed = if (isFinalFinish) totalSecondsAtStart.toLong() else nextElapsed
-        val timeUntilNext = (actualNextElapsed - elapsedAtStart)
-        
+        // [v1.7.6-fix] 즉시 다시 울리는 버그 방지를 위해 최소 10초 이상의 여유를 둡니다.
+        val timeUntilNext = (actualNextElapsed - elapsedAtStart).coerceAtLeast(10)
         val nextAlarmTime = currentTimeMillis + (timeUntilNext * 1000L)
         
         val transitioningTo = if (isFinalFinish) BlockType.FOCUS 
@@ -328,7 +328,6 @@ class TimerService : Service() {
 
         val intent = Intent(this, TimerAlarmReceiver::class.java).apply {
             addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            // 액션을 고정하여 중복 예약을 방지
             action = "com.focusflow.app.ALARM_ACTION"
             putExtra("taskTitle", statusTitle)
             putExtra("elapsedMinutes", (actualNextElapsed / 60).toInt())
@@ -350,16 +349,14 @@ class TimerService : Service() {
             })
         }
 
-        // [v1.7.6-fix] PendingIntent 플래그 최적화 (FLAG_MUTABLE이 필요한 경우가 있음)
-        // 시스템이 이 알람을 '새로운 알람'으로 확실히 인지하게 함
+        // FLAG_CANCEL_CURRENT를 사용하여 기존의 모든 유령 예약을 확실히 파기하고 새로 만듭니다.
         val pi = PendingIntent.getBroadcast(
             this, 
-              FINISH_ALARM_ID, 
+            FINISH_ALARM_ID, 
             intent, 
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE // [v1.7.6-fix] 일부 기기에서 알람 갱신을 위해 MUTABLE 허용
+            PendingIntent.FLAG_CANCEL_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         
-        // Z플립5 커버 스크린 가시성을 위해 AlarmClock 사용은 유지하되, 하나만 예약
         val alarmInfo = AlarmManager.AlarmClockInfo(nextAlarmTime, pi)
         alarmManager.setAlarmClock(alarmInfo, pi)
         pendingAlarms.add(pi)

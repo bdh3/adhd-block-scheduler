@@ -30,39 +30,26 @@ import com.focusflow.app.util.NotificationHelper
 
 class AlarmActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        // [v1.7.3] 윈도우 플래그 통합 설정 함수 호출 (DeskClock 방식 최적화)
+        applyWindowFlags()
+        
         super.onCreate(savedInstanceState)
         
-        // [v1.7.3] 화면이 꺼져 있을 때 깨우고 잠금 화면 위로 띄우는 설정
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-            setShowWhenLocked(true)
-            setTurnScreenOn(true)
-            val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
-            keyguardManager.requestDismissKeyguard(this, null)
-        } else {
-            @Suppress("DEPRECATION")
-            window.addFlags(
-                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
-                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
-                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
-            )
-        }
-
-        // 2. 사운드 및 알림 매니저 접근
         val notificationHelper = NotificationHelper.getInstance(this)
-
         val taskTitle = intent.getStringExtra("taskTitle") ?: "독립 세션"
         val message = intent.getStringExtra("message") ?: "구간이 전환되었습니다."
+        val isFinished = intent.getBooleanExtra("isFinished", false)
 
         setContent {
             AlarmScreen(
                 taskTitle = taskTitle,
                 message = message,
+                isFinished = isFinished,
                 onDismiss = {
                     notificationHelper.stopAllAlerts()
-                    // [v1.7.3] 서비스에 알람 중단 신호를 보내 즉시 종료 유도
                     val stopIntent = Intent(this@AlarmActivity, TimerService::class.java).apply {
                         putExtra("stop_alarm", true)
+                        putExtra("isFinished", isFinished)
                     }
                     startService(stopIntent)
                     finish()
@@ -70,13 +57,32 @@ class AlarmActivity : ComponentActivity() {
             )
         }
 
-        // [v1.7.3] 20초 후 자동 닫기 (NotificationHelper의 자동 정지와 동기화)
         lifecycleScope.launch {
             delay(NotificationHelper.ALARM_TIMEOUT_MS)
-            if (!isDestroyed) {
-                finish()
-            }
+            if (!isDestroyed) finish()
         }
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        applyWindowFlags()
+    }
+
+    private fun applyWindowFlags() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+            val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+            keyguardManager.requestDismissKeyguard(this, null)
+        }
+
+        window.addFlags(
+            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
+            WindowManager.LayoutParams.FLAG_ALLOW_LOCK_WHILE_SCREEN_ON or
+            WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+            WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+            WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
+        )
     }
 
     override fun onDestroy() {
@@ -90,6 +96,7 @@ class AlarmActivity : ComponentActivity() {
 fun AlarmScreen(
     taskTitle: String,
     message: String,
+    isFinished: Boolean = false,
     onDismiss: () -> Unit
 ) {
     Surface(

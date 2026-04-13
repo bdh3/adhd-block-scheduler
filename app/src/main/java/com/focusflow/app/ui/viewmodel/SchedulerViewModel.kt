@@ -118,7 +118,7 @@ class SchedulerViewModel(
                     scheduledDateMillis = startOfDay,
                     startTimeMillis = schedule.startTimeMillis, // 정렬용 실제 시간
                     isCompleted = schedule.isCompleted,
-                    durationMinutes = schedule.durationMinutes
+                    durationMinutes = schedule.durationMinutes // [수정] 기간 정보 명시적 전달
                 )
             }
             
@@ -174,6 +174,7 @@ class SchedulerViewModel(
                 settingsRepository.finishRingtoneUri,
                 settingsRepository.useFullScreenAlarm
             ) { values ->
+                @Suppress("UNCHECKED_CAST")
                 val allSchedules = values[0] as List<ScheduleBlock>
                 val interval = values[1] as Int
                 val rest = values[2] as Int
@@ -248,40 +249,47 @@ class SchedulerViewModel(
 
         serviceCollectorJob = viewModelScope.launch {
             val s = service
-            // [v1.7.3] 서비스가 다시 연결될 때, 만약 UI상으로는 실행 중인데 서비스 설정이 비어있다면 재설정
+            // [v1.7.3] 서비스 연결 시 콜백을 항상 최신화하여 세션 종료 시 onSessionFinished가 반드시 호출되도록 합니다.
             val currentState = _uiState.value
-            if (currentState.isTimerActive && s.config.value == null) {
-                val taskTitleForService = if (!currentState.selectedTaskTitle.isNullOrEmpty()) currentState.selectedTaskTitle else ""
-                s.setTimerConfig(
-                    interval = currentState.alarmIntervalMinutes,
-                    rest = currentState.restMinutes,
-                    totalSec = currentState.sessionTotalMinutes * 60,
-                    title = taskTitleForService,
-                    vibrate = currentState.vibrationEnabled,
-                    sound = currentState.soundEnabled,
-                    useFullScreen = currentState.useFullScreenAlarm,
-                    focusPatternId = currentState.focusVibrationPatternId,
-                    restPatternId = currentState.restVibrationPatternId,
-                    finishPatternId = currentState.finishVibrationPatternId,
-                    focusSound = currentState.focusSoundId,
-                    restSound = currentState.restSoundId,
-                    finishSound = currentState.finishSoundId,
-                    focusRingtoneUri = currentState.focusRingtoneUri,
-                    restRingtoneUri = currentState.restRingtoneUri,
-                    finishRingtoneUri = currentState.finishRingtoneUri,
-                    onTransition = { t, e, f, bt, isSkip -> onBlockTransition(t, e, f, bt, isSkip) },
-                    onFinished = { onSessionFinished() }
-                )
-            }
+            
+            // 기존 config가 있든 없든, UI 상태에 맞춰서 콜백(onTransition, onFinished)을 다시 바인딩합니다.
+            val config = s.config.value
+            val taskTitleForService = config?.title ?: currentState.selectedTaskTitle ?: ""
+            val interval = config?.intervalMinutes ?: currentState.alarmIntervalMinutes
+            val rest = config?.restMinutes ?: currentState.restMinutes
+            val totalSec = config?.totalSecondsAtStart ?: (currentState.sessionTotalMinutes * 60)
+            
+            s.setTimerConfig(
+                interval = interval,
+                rest = rest,
+                totalSec = totalSec,
+                title = taskTitleForService,
+                vibrate = config?.vibrate ?: currentState.vibrationEnabled,
+                sound = config?.sound ?: currentState.soundEnabled,
+                useFullScreen = config?.useFullScreen ?: currentState.useFullScreenAlarm,
+                focusPatternId = config?.focusPatternId ?: currentState.focusVibrationPatternId,
+                restPatternId = config?.restPatternId ?: currentState.restVibrationPatternId,
+                finishPatternId = config?.finishPatternId ?: currentState.finishVibrationPatternId,
+                focusSound = config?.focusSound ?: currentState.focusSoundId,
+                restSound = config?.restSound ?: currentState.restSoundId,
+                finishSound = config?.finishSound ?: currentState.finishSoundId,
+                focusRingtoneUri = config?.focusRingtoneUri ?: currentState.focusRingtoneUri,
+                restRingtoneUri = config?.restRingtoneUri ?: currentState.restRingtoneUri,
+                finishRingtoneUri = config?.finishRingtoneUri ?: currentState.finishRingtoneUri,
+                onTransition = { t, e, f, bt, isSkip -> onBlockTransition(t, e, f, bt, isSkip) },
+                onFinished = { onSessionFinished() }
+            )
 
             combine(s.remainingSeconds, s.totalRemainingSeconds, s.isRunning, s.currentBlockIndex) { rem, total, running, idx ->
                 _uiState.update { state ->
+                    // [v1.7.3] 상태 판단 로직 강화: total이 0이면 세션 자체가 끝난 것으로 판단
+                    val active = total > 0 || (running && total > 0)
                     state.copy(
-                        remainingSeconds = if (total > 0 || running) rem else state.remainingSeconds,
-                        totalRemainingSeconds = if (total > 0 || running) total else state.totalRemainingSeconds,
+                        remainingSeconds = if (active) rem else 0,
+                        totalRemainingSeconds = if (active) total else 0,
                         isRunning = running,
                         currentBlockIndex = idx,
-                        isTimerActive = total > 0 || running || (state.isTimerActive && TimerService.isServiceRunning)
+                        isTimerActive = active
                     )
                 }
             }.collect()
@@ -291,18 +299,27 @@ class SchedulerViewModel(
             service.config.collect { config ->
                 config?.let {
                     val blocks = generateBlocks(it.intervalMinutes, it.restMinutes, it.totalSecondsAtStart)
-                    _uiState.update { state -> state.copy(timeBlocks = blocks) }
+                    _uiState.update { state -> 
+                        state.copy(
+                            timeBlocks = blocks,
+                            // [v1.7.3] 서비스 설정에서 제목을 복구하여 UI 버튼 노출 상태 유지
+                            selectedTaskTitle = if (state.selectedTaskTitle.isNullOrEmpty()) it.title else state.selectedTaskTitle,
+                            alarmIntervalMinutes = it.intervalMinutes,
+                            restMinutes = it.restMinutes,
+                            sessionTotalMinutes = it.totalSecondsAtStart / 60
+                        )
+                    }
                 }
             }
         }
     }
 
-    private fun generateBlocks(intervalMinutes: Int, restMinutes: Int, totalSeconds: Int): List<TimeBlock> {
+    private fun generateBlocks(intervalMinutes: Int, restMinutes: Int, totalSeconds: Int, startTime: Long? = null): List<TimeBlock> {
         val blocks = mutableListOf<TimeBlock>()
         var remaining = totalSeconds
         val focusSec = intervalMinutes * 60
         val restSec = restMinutes * 60
-        var currentTime = System.currentTimeMillis()
+        var currentTime = startTime ?: System.currentTimeMillis()
 
         while (remaining > 0) {
             // Focus block
@@ -434,24 +451,29 @@ class SchedulerViewModel(
             if (scheduleId != null) {
                 scheduleRepository.getScheduleById(scheduleId)?.let { schedule ->
                     scheduleRepository.updateSchedule(schedule.copy(isCompleted = true))
-                    // Task 테이블과 동기화된 경우 같이 업데이트
                     repository.updateTaskCompletion(scheduleId, true)
                 }
             } else if (taskId != null) {
                 repository.updateTaskCompletion(taskId, true)
             }
             
-            // 타이머 중지 및 상태 초기화
+            // 타이머 중지 및 상태 초기화 (기본 설정값으로 복구)
             timerService?.stopTimer()
-            _uiState.update { it.copy(
-                isRunning = false,
-                isTimerActive = false,
-                totalRemainingSeconds = 0,
-                remainingSeconds = 0,
-                selectedTaskId = null,
-                selectedTaskTitle = null,
-                currentScheduleId = null
-            ) }
+            _uiState.update { currentState ->
+                val defTotalSec = currentState.defaultTotalMinutes * 60
+                val defIntervalSec = currentState.storedAlarmIntervalMinutes * 60
+                currentState.copy(
+                    isRunning = false,
+                    isTimerActive = false,
+                    totalRemainingSeconds = defTotalSec,
+                    remainingSeconds = defIntervalSec,
+                    currentBlockIndex = 0,
+                    selectedTaskId = null,
+                    selectedTaskTitle = null,
+                    currentScheduleId = null,
+                    timeBlocks = generateBlocks(currentState.storedAlarmIntervalMinutes, currentState.storedRestMinutes, defTotalSec)
+                )
+            }
         }
     }
 
@@ -586,29 +608,38 @@ class SchedulerViewModel(
 
     fun stopTimer() {
         timerService?.stopTimer()
-        _uiState.update { it.copy(
-            isRunning = false,
-            isTimerActive = false,
-            totalRemainingSeconds = 0,
-            remainingSeconds = 0
-        ) }
+        _uiState.update { state ->
+            val defTotalSec = state.defaultTotalMinutes * 60
+            val defIntervalSec = state.storedAlarmIntervalMinutes * 60
+            state.copy(
+                isRunning = false,
+                isTimerActive = false,
+                selectedTaskId = null,
+                selectedTaskTitle = null,
+                currentScheduleId = null,
+                totalRemainingSeconds = defTotalSec,
+                remainingSeconds = defIntervalSec,
+                currentBlockIndex = 0,
+                timeBlocks = generateBlocks(state.storedAlarmIntervalMinutes, state.storedRestMinutes, defTotalSec)
+            )
+        }
     }
 
     fun toggleTimer() {
         val state = _uiState.value
-        if (state.isRunning) {
-            timerService?.pauseTimer()
+        val service = timerService ?: return
+        
+        // [v1.7.3-patch2] UI 상태가 아닌 서비스의 실제 상태를 직접 체크하여 상태 전이 루프 방지
+        if (service.isRunning.value) {
+            service.pauseTimer()
         } else {
-            if (timerService == null) return
-            
             // 만약 현재 활성화된 세션이 없다면 선택된 제목이나 작업으로 시작
             if (!state.isTimerActive) {
                 val selectedTask = state.tasks.find { it.id == state.selectedTaskId }
-                // [v1.7.3] 1회성 작업의 기본 명칭은 "독립 세션"
                 val finalTitle = state.selectedTaskTitle ?: selectedTask?.title ?: "독립 세션"
                 startSession(state.selectedTaskId, finalTitle, state.currentScheduleId)
             } else {
-                timerService?.startTimer(state.totalRemainingSeconds)
+                service.startTimer(state.totalRemainingSeconds)
             }
         }
     }
@@ -622,21 +653,27 @@ class SchedulerViewModel(
 
         if (taskId == null) {
             _uiState.update { state ->
-                val totalSec = state.defaultTotalMinutes * 60
+                val defTotalMin = state.defaultTotalMinutes
+                val defIntervalMin = state.storedAlarmIntervalMinutes
+                val totalSec = defTotalMin * 60
+                val intervalSec = defIntervalMin * 60
+                
                 state.copy(
                     selectedTaskId = null,
                     selectedTaskTitle = null,
                     currentScheduleId = null,
-                    sessionTotalMinutes = state.defaultTotalMinutes,
-                    alarmIntervalMinutes = state.storedAlarmIntervalMinutes,
+                    sessionTotalMinutes = defTotalMin,
+                    alarmIntervalMinutes = defIntervalMin,
                     restMinutes = state.storedRestMinutes,
                     totalRemainingSeconds = totalSec,
-                    remainingSeconds = state.storedAlarmIntervalMinutes * 60,
+                    remainingSeconds = intervalSec,
+                    currentBlockIndex = 0,
                     isTimerActive = false,
                     isRunning = false,
-                    timeBlocks = generateBlocks(state.storedAlarmIntervalMinutes, state.storedRestMinutes, totalSec)
+                    timeBlocks = generateBlocks(defIntervalMin, state.storedRestMinutes, totalSec)
                 )
             }
+            timerService?.stopTimer()
             return
         }
 
@@ -658,7 +695,12 @@ class SchedulerViewModel(
                     totalRemainingSeconds = totalSec,
                     remainingSeconds = schedule.intervalMinutes * 60,
                     isTimerActive = false,
-                    timeBlocks = generateBlocks(schedule.intervalMinutes, schedule.restMinutes, totalSec)
+                    timeBlocks = generateBlocks(
+                        schedule.intervalMinutes, 
+                        schedule.restMinutes, 
+                        totalSec,
+                        startTime = schedule.startTimeMillis
+                    )
                 )
             } else {
                 // 일반 Task인 경우 기본 설정 사용
@@ -713,7 +755,18 @@ class SchedulerViewModel(
 
     fun deleteSchedule(schedule: ScheduleBlock) {
         viewModelScope.launch {
+            // ScheduleBlock 삭제
             scheduleRepository.deleteSchedule(schedule)
+            
+            // Task 테이블에서도 연동 삭제
+            repository.getTaskById(schedule.id)?.let {
+                repository.deleteTask(it)
+            }
+            
+            // 현재 선택된 작업이 삭제된 경우 선택 해제
+            if (_uiState.value.currentScheduleId == schedule.id || _uiState.value.selectedTaskId == schedule.id) {
+                selectTask(null)
+            }
         }
     }
 
@@ -856,6 +909,18 @@ class SchedulerViewModel(
 
     fun requestIgnoreBatteryOptimizations() {
         val intent = Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+            data = Uri.parse("package:${app.packageName}")
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        app.startActivity(intent)
+    }
+
+    fun canDrawOverlays(): Boolean {
+        return Settings.canDrawOverlays(app)
+    }
+
+    fun requestDrawOverlaysPermission() {
+        val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).apply {
             data = Uri.parse("package:${app.packageName}")
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
         }

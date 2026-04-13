@@ -58,6 +58,7 @@ fun SchedulerScreen(viewModel: SchedulerViewModel, onNavigateToCalendar: () -> U
                     totalRemainingSeconds = uiState.totalRemainingSeconds,
                     remainingSeconds = uiState.remainingSeconds,
                     isRunning = uiState.isRunning,
+                    isTimerActive = uiState.isTimerActive,
                     progress = progress,
                     blockType = currentBlock?.type ?: BlockType.FOCUS,
                     selectedTaskTitle = uiState.selectedTaskTitle,
@@ -224,6 +225,7 @@ fun TimerHeader(
     totalRemainingSeconds: Int,
     remainingSeconds: Int,
     isRunning: Boolean,
+    isTimerActive: Boolean,
     progress: Float,
     blockType: BlockType,
     selectedTaskTitle: String?,
@@ -307,18 +309,17 @@ fun TimerHeader(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // [v1.7.3] 작업이 선택되지 않았을 때는 무조건 '시작' 버튼만 표시
-                val isTaskSelected = selectedTaskTitle != null
+                // [v1.7.3] 세션이 실제로 활성화(시작됨) 되었을 때만 제어 버튼(중지, 넘기기) 표시
+                val isTaskSelected = selectedTaskTitle != null || isTimerActive
 
                 Button(
                     onClick = onToggleTimer,
-                    modifier = Modifier.weight(if (isTaskSelected && (isRunning || totalRemainingSeconds > 0)) 1.2f else 1f),
+                    modifier = Modifier.weight(if (isTaskSelected && isTimerActive) 1.2f else 1f),
                     shape = MaterialTheme.shapes.medium,
                     contentPadding = PaddingValues(horizontal = 4.dp)
                 ) {
-                    val isSessionActive = totalRemainingSeconds > 0
                     val totalSecs = sessionTotalMinutes * 60
-                    val isInitialState = totalRemainingSeconds >= totalSecs || totalRemainingSeconds == 0
+                    val isInitialState = (totalRemainingSeconds >= totalSecs || totalRemainingSeconds == 0) && !isRunning
                     
                     Icon(
                         if (isRunning) Icons.Default.Refresh else Icons.Default.PlayArrow,
@@ -330,15 +331,16 @@ fun TimerHeader(
                         when {
                             isRunning -> "일시정지"
                             !isTaskSelected || isInitialState -> "시작"
-                            isSessionActive -> "재개"
+                            isTimerActive -> "재개"
                             else -> "시작"
                         },
                         maxLines = 1
                     )
                 }
                 
-                // 작업이 선택되었고 활성 세션이 있을 때만 중지/넘기기 표시
-                if (isTaskSelected && (isRunning || totalRemainingSeconds > 0)) {
+                // 세션이 실제로 진행 중이거나 일시정지 상태일 때만 중지/넘기기 표시
+                if (isTimerActive) {
+                    Spacer(Modifier.width(8.dp))
                     OutlinedButton(
                         onClick = onStopTimer,
                         modifier = Modifier.weight(0.7f),
@@ -350,6 +352,7 @@ fun TimerHeader(
                     }
 
                     if (isRunning) {
+                        Spacer(Modifier.width(8.dp))
                         OutlinedButton(
                             onClick = onSkip,
                             modifier = Modifier.weight(0.8f),

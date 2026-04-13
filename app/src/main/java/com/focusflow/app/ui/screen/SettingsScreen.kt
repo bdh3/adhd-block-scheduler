@@ -705,6 +705,28 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                 }
             )
 
+            val canDrawOverlays = viewModel.canDrawOverlays()
+
+            ListItem(
+                headlineContent = { Text("다른 앱 위에 표시") },
+                supportingContent = {
+                    Text(if (canDrawOverlays)
+                        "잠금 화면이나 다른 앱 사용 중에도 알람 화면을 즉시 띄울 수 있습니다."
+                        else "잠금 화면을 뚫고 알람을 표시하기 위해 이 권한이 필수적입니다.")
+                },
+                trailingContent = {
+                    Button(
+                        onClick = { viewModel.requestDrawOverlaysPermission() },
+                        enabled = !canDrawOverlays,
+                        colors = if (canDrawOverlays)
+                            ButtonDefaults.filledTonalButtonColors()
+                            else ButtonDefaults.buttonColors()
+                    ) {
+                        Text(if (canDrawOverlays) "설정됨" else "설정하기")
+                    }
+                }
+            )
+
             Spacer(modifier = Modifier.height(32.dp))
 
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {

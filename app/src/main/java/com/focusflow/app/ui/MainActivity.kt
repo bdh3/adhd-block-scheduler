@@ -125,6 +125,17 @@ class MainActivity : ComponentActivity() {
                         }
                         context.startActivity(intent)
                     }
+
+                    // [v1.7.3] '다른 앱 위에 표시' 권한 확인 (잠금 화면 알람 필수) - 초기 실행 시 강제 팝업 방지를 위해 로직 수정 가능하나 현재는 설정 유도
+                    /*
+                    if (!Settings.canDrawOverlays(context)) {
+                        val intent = Intent(
+                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            Uri.parse("package:${context.packageName}")
+                        )
+                        context.startActivity(intent)
+                    }
+                    */
                 }
                 
                 Surface(modifier = Modifier.fillMaxSize()) {

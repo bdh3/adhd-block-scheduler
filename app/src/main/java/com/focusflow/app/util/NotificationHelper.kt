@@ -154,19 +154,29 @@ class NotificationHelper private constructor(private val context: Context) {
 
         val alarmActivityIntent = Intent(context, AlarmActivity::class.java).apply {
             action = "com.focusflow.app.ALARM_ACTION_${System.currentTimeMillis()}" 
-            // [v1.7.6-fix] Z플립5 커버 스크린 돌파를 위한 플래그 보강
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or 
                     Intent.FLAG_ACTIVITY_NO_USER_ACTION or 
-                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
-                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                    Intent.FLAG_ACTIVITY_MULTIPLE_TASK or
-                    Intent.FLAG_ACTIVITY_NEW_DOCUMENT
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP
             putExtra("taskTitle", displayTitle)
             putExtra("message", message)
             putExtra("isFinished", isFinished)
         }
+
+        // [v1.7.6-final] 알림에서 직접 중단할 수 있는 액션 추가 (잠금 화면 대응)
+        val stopIntent = android.content.Intent(context, com.focusflow.app.service.TimerService::class.java).apply {
+            putExtra("stop_alarm", true)
+            putExtra("isFinished", isFinished)
+        }
+        val stopPendingIntent = PendingIntent.getService(
+            context, 2002, stopIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         val fullScreenPendingIntent = PendingIntent.getActivity(
-            context, 2001, alarmActivityIntent,
+            context, 
+            2001,
+            alarmActivityIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
@@ -178,44 +188,36 @@ class NotificationHelper private constructor(private val context: Context) {
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setFullScreenIntent(fullScreenPendingIntent, true)
             .setContentIntent(pendingIntent)
+            .addAction(R.drawable.ic_launcher_foreground, "알람 중단", stopPendingIntent) // 액션 버튼 추가
             .setAutoCancel(true)
-            // [v1.7.5-fix] 종료 알림(isFinished)인 경우 ongoing을 해제하여 사용자가 밀어서 지울 수 있게 함
             .setOngoing(forceFullScreen && !isFinished)
-            // 잠금 화면에서도 내용을 "항상 표시"하도록 강제
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setLocalOnly(true)
             .setWhen(System.currentTimeMillis()) 
             .setShowWhen(true)
-            // [v1.7.6-patch] 최신 안드로이드(Z플립5 등) 대응: 긴급도 최대 설정 및 알람 카테고리 명시
-            .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
-            // [v1.7.6-patch] 최신 안드로이드(Z플립5 등) 대응: 긴급도 최대 설정 및 알람 카테고리 명시
-            .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
-            // [v1.7.6-patch] 최신 안드로이드(Z플립5 등) 대응: 긴급도 최대 설정 및 알람 카테고리 명시
-            .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
 
         if (forceFullScreen) {
             builder.setPriority(NotificationCompat.PRIORITY_MAX)
             startTimeoutCounter()
             
-            // [v1.7.6-patch] Z플립5 등 삼성 기기 대응: PowerManager를 사용하여 화면을 강제로 깨웁니다.
-            try {
-                val pm = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
-                val wakeLock = pm.newWakeLock(
-                    android.os.PowerManager.FULL_WAKE_LOCK or
-                    android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP or
-                    android.os.PowerManager.ON_AFTER_RELEASE,
-                    "FocusFlow:AlarmWakeLock"
-                )
-                // 화면을 15초간 강제로 켭니다.
-                wakeLock.acquire(15000L) 
+            // [v1.7.6-final] 안드로이드 14+ 대응: 전체 화면 알람 권한 확인
+            val canUseFSI = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                notificationManager.canUseFullScreenIntent()
+            } else true
 
-                // [핵심] PendingIntent에만 의존하지 않고 액티비티를 직접 즉시 실행
-                context.startActivity(alarmActivityIntent)
-            } catch (e: Exception) { 
-                e.printStackTrace() 
+            if (canUseFSI) {
+                try {
+                    val pm = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+                    val wakeLock = pm.newWakeLock(
+                        android.os.PowerManager.FULL_WAKE_LOCK or
+                        android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                        "FocusFlow:AlarmWakeLock"
+                    )
+                    // 화면을 깨워 fullScreenIntent가 즉시 활성화되도록 유도 (3초면 충분)
+                    wakeLock.acquire(3000L) 
+                } catch (e: Exception) { 
+                    e.printStackTrace() 
+                }
             }
         } else {
             builder.setDefaults(0)

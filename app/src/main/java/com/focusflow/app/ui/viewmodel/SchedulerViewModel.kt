@@ -609,18 +609,25 @@ class SchedulerViewModel(
     fun stopTimer() {
         timerService?.stopTimer()
         _uiState.update { state ->
-            val defTotalSec = state.defaultTotalMinutes * 60
-            val defIntervalSec = state.storedAlarmIntervalMinutes * 60
+            val defTotalMin = state.defaultTotalMinutes
+            val defIntervalMin = state.storedAlarmIntervalMinutes
+            val defRestMin = state.storedRestMinutes
+            val defTotalSec = defTotalMin * 60
+            val defIntervalSec = defIntervalMin * 60
+            
             state.copy(
                 isRunning = false,
                 isTimerActive = false,
                 selectedTaskId = null,
                 selectedTaskTitle = "작업을 선택하세요",
                 currentScheduleId = null,
+                sessionTotalMinutes = defTotalMin,
+                alarmIntervalMinutes = defIntervalMin,
+                restMinutes = defRestMin,
                 totalRemainingSeconds = defTotalSec,
                 remainingSeconds = defIntervalSec,
                 currentBlockIndex = 0,
-                timeBlocks = generateBlocks(state.storedAlarmIntervalMinutes, state.storedRestMinutes, defTotalSec)
+                timeBlocks = generateBlocks(defIntervalMin, defRestMin, defTotalSec)
             )
         }
     }

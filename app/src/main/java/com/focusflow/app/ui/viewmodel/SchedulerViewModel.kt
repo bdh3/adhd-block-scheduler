@@ -196,9 +196,9 @@ class SchedulerViewModel(
                 val fullScreen = values[18] as Boolean
 
                 _uiState.update { state ->
-                    val newSessionTotal = if (!state.isTimerActive) defTotal else state.sessionTotalMinutes
-                    val newInterval = if (!state.isTimerActive) interval else state.alarmIntervalMinutes
-                    val newRest = if (!state.isTimerActive) rest else state.restMinutes
+                    val newSessionTotal = if (!state.isTimerActive && state.selectedTaskId == null) defTotal else state.sessionTotalMinutes
+                    val newInterval = if (!state.isTimerActive && state.selectedTaskId == null) interval else state.alarmIntervalMinutes
+                    val newRest = if (!state.isTimerActive && state.selectedTaskId == null) rest else state.restMinutes
                     
                     state.copy(
                         allSchedules = allSchedules,
@@ -343,20 +343,26 @@ class SchedulerViewModel(
 
     fun startSession(taskId: String?, title: String?, scheduleId: String? = null) {
         val state = _uiState.value
+        
+        // 현재 UI 상태에 있는 값을 캡처
+        val interval = state.alarmIntervalMinutes
+        val rest = state.restMinutes
+        val sessionTotalMin = state.sessionTotalMinutes
+        
         _uiState.update { it.copy(
             isTimerActive = true,
             isRunning = true,
             selectedTaskId = taskId,
             selectedTaskTitle = title,
             currentScheduleId = scheduleId,
-            totalRemainingSeconds = state.sessionTotalMinutes * 60
+            totalRemainingSeconds = sessionTotalMin * 60
         ) }
         
         viewModelScope.launch {
             timerService?.setTimerConfig(
-                interval = state.alarmIntervalMinutes,
-                rest = state.restMinutes,
-                totalSec = state.sessionTotalMinutes * 60,
+                interval = interval,
+                rest = rest,
+                totalSec = sessionTotalMin * 60,
                 title = title ?: "",
                 vibrate = state.vibrationEnabled,
                 sound = state.soundEnabled,
@@ -373,7 +379,7 @@ class SchedulerViewModel(
                 onTransition = { t, e, f, bt, isSkip -> onBlockTransition(t, e, f, bt, isSkip) },
                 onFinished = { onSessionFinished() }
             )
-            timerService?.startTimer(state.sessionTotalMinutes * 60)
+            timerService?.startTimer(sessionTotalMin * 60)
         }
     }
 

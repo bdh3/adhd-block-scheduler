@@ -248,7 +248,7 @@ fun CalendarScreen(
                                         startTimeMinute = calendar.get(Calendar.MINUTE),
                                         startNewSession = false,
                                         intervalMinutes = uiState.storedAlarmIntervalMinutes,
-                                        restMinutes = uiState.storedRestMinutes
+                                        restMinutes = 0 // 퀵바에서는 연속 집중 모드(휴식 0)를 기본값으로 함 (v1.8.0 핫픽스: storedRestMinutes 무시 방지)
                                     )
                                     viewModel.clearSelectedBlocks()
                                     quickTaskTitle = ""
@@ -515,21 +515,24 @@ fun CalendarScreen(
             },
             confirmButton = {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val duration = totalMin
+                    val firstBlock = uiState.selectedBlocks.minOrNull() ?: System.currentTimeMillis()
+                    val calendar = Calendar.getInstance().apply { timeInMillis = firstBlock }
+                    val finalTitle = taskTitle.ifBlank { "새 작업" }
+                    val finalInterval = localInterval
+                    val finalRest = if (isCycleMode) localRestMinutes else 0
+
                     OutlinedButton(
                         modifier = Modifier.weight(1f),
                         onClick = {
-                            val duration = totalMin
-                            val firstBlock = uiState.selectedBlocks.minOrNull() ?: System.currentTimeMillis()
-                            val calendar = Calendar.getInstance().apply { timeInMillis = firstBlock }
-                            
                             viewModel.addSchedule(
-                                taskTitle = taskTitle.ifBlank { "새 작업" },
+                                taskTitle = finalTitle,
                                 durationMinutes = duration,
                                 startTimeHour = calendar.get(Calendar.HOUR_OF_DAY),
                                 startTimeMinute = calendar.get(Calendar.MINUTE),
                                 startNewSession = false,
-                                intervalMinutes = localInterval,
-                                restMinutes = if (isCycleMode) localRestMinutes else 0
+                                intervalMinutes = finalInterval,
+                                restMinutes = finalRest
                             )
                             viewModel.clearSelectedBlocks()
                             showAddTaskDialog = false
@@ -540,26 +543,24 @@ fun CalendarScreen(
                     Button(
                         modifier = Modifier.weight(1f),
                         onClick = {
-                            val duration = totalMin
-                            val firstBlock = uiState.selectedBlocks.minOrNull() ?: System.currentTimeMillis()
-                            val calendar = Calendar.getInstance().apply { timeInMillis = firstBlock }
-                            
+                            // 명시적인 스케줄 객체를 생성하여 loadScheduledSession에 전달함으로써 
+                            // addSchedule 비동기 작업 완료 전에도 UI 상태를 즉시 업데이트 (v1.8.0 핫픽스)
                             val newSchedule = ScheduleBlock(
-                                id = UUID.randomUUID().toString(),
-                                taskTitle = taskTitle.ifBlank { "새 작업" },
+                                taskTitle = finalTitle,
                                 startTimeMillis = firstBlock,
                                 durationMinutes = duration,
-                                intervalMinutes = localInterval,
-                                restMinutes = if (isCycleMode) localRestMinutes else 0
+                                intervalMinutes = finalInterval,
+                                restMinutes = finalRest
                             )
+                            
                             viewModel.addSchedule(
-                                taskTitle = newSchedule.taskTitle,
+                                taskTitle = finalTitle,
                                 durationMinutes = duration,
                                 startTimeHour = calendar.get(Calendar.HOUR_OF_DAY),
                                 startTimeMinute = calendar.get(Calendar.MINUTE),
                                 startNewSession = false,
-                                intervalMinutes = localInterval,
-                                restMinutes = newSchedule.restMinutes
+                                intervalMinutes = finalInterval,
+                                restMinutes = finalRest
                             )
                             viewModel.loadScheduledSession(newSchedule)
                             viewModel.clearSelectedBlocks()

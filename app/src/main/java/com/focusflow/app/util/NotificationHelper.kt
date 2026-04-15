@@ -45,7 +45,7 @@ class NotificationHelper private constructor(private val context: Context) {
 
     companion object {
         // [v1.7.6-recovery] 채널 중요도 강제 초기화를 위해 ID 변경
-        const val ALARM_HIGH_CHANNEL_ID = "focus_flow_alarm_v14_emergency"
+        const val ALARM_HIGH_CHANNEL_ID = "focus_flow_alarm_v15_emergency"
         const val SILENT_SERVICE_CHANNEL_ID = "focus_flow_service_v13"
         const val SERVICE_NOTIFICATION_ID = 1000
         const val ALARM_NOTIFICATION_ID = 2000 
@@ -78,7 +78,7 @@ class NotificationHelper private constructor(private val context: Context) {
                 lightColor = android.graphics.Color.RED
                 // [v1.7.6-patch] 채널 레벨에서 진동을 활성화해야 FSI 확률이 높아짐
                 enableVibration(true)
-                vibrationPattern = longArrayOf(0, 500, 200, 500)
+                vibrationPattern = longArrayOf(0, 1) // 시스템이 '진동 있음'으로 인식하게 유도
                 setSound(null, null)
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
                 setBypassDnd(true)
@@ -140,8 +140,9 @@ class NotificationHelper private constructor(private val context: Context) {
             else -> restSoundId
         }
         
-        val isRingtone = sId == "ringtone"
-        val forceFullScreen = isRingtone || useFullScreen 
+        val isRingtone = soundEnabled && sId == "ringtone"
+        val isManualFullScreen = useFullScreen && (soundEnabled || vibrationEnabled)
+        val forceFullScreen = isRingtone || isManualFullScreen
         
         stopAllAlerts()
         isLoopingActive = forceFullScreen
@@ -187,9 +188,6 @@ class NotificationHelper private constructor(private val context: Context) {
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(displayTitle)
             .setContentText(message)
-            .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setFullScreenIntent(fullScreenPendingIntent, true)
             .setContentIntent(pendingIntent)
             .addAction(R.drawable.ic_launcher_foreground, "알람 중단", stopPendingIntent) // 액션 버튼 추가
             .setAutoCancel(true)
@@ -198,45 +196,87 @@ class NotificationHelper private constructor(private val context: Context) {
             .setLocalOnly(true)
             .setWhen(System.currentTimeMillis()) 
             .setShowWhen(true)
+            .setDefaults(0)
+            .setSound(null)
+            .setVibrate(longArrayOf(0))
+
+        // [v1.8.2-fix] 팝업 알림 모드에서도 화면이 꺼져있을 때 안정적으로 알람을 인지할 수 있도록 WakeLock 통합 관리
+        // 특히 BroadcastReceiver 종료 후 코루틴 지연 시간(500ms) 동안 CPU가 잠드는 것을 방지
+        try {
+            val pm = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+            val wakeLock = pm.newWakeLock(
+                android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK or
+                android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP or
+                android.os.PowerManager.ON_AFTER_RELEASE,
+                "FocusFlow:AlarmWakeLock"
+            )
+            // 소리/진동 코루틴이 시작되고 안정적으로 실행될 수 있도록 10초간 유지
+            wakeLock.acquire(10000L) 
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        val pm = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+        val isScreenOn = pm.isInteractive
 
         if (forceFullScreen) {
-            builder.setPriority(NotificationCompat.PRIORITY_MAX)
-            
-            // [v1.7.6-recovery] 알림을 먼저 시스템에 등록하여 알람 상태임을 선포
-            notificationManager.notify(ALARM_NOTIFICATION_ID, builder.build())
-            
-            startTimeoutCounter()
-            
-            // [v1.7.6-recovery] 권한 체크 없이 무조건 화면 깨우기 및 액티비티 실행 시도
-            try {
-                val pm = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
-                val wakeLock = pm.newWakeLock(
-                    android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK or
-                    android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP or
-                    android.os.PowerManager.ON_AFTER_RELEASE,
-                    "FocusFlow:AlarmWakeLock"
-                )
-                wakeLock.acquire(5000L) 
-                
-                // 직접 실행 (패턴 창 소환 원인은 이미 제거됨)
-                context.startActivity(alarmActivityIntent)
-            } catch (e: Exception) { 
-                e.printStackTrace() 
+            if (isScreenOn) {
+                // [v1.8.2-fix] 화면이 이미 켜져 있다면 직접 액티비티를 시작
+                // 배너 중첩 방지를 위해 중요도가 낮은(LOW) 서비스 채널로 우회하고 카테고리를 낮춤
+                builder.setChannelId(SILENT_SERVICE_CHANNEL_ID) 
+                builder.setPriority(NotificationCompat.PRIORITY_LOW)
+                builder.setCategory(NotificationCompat.CATEGORY_STATUS)
+                builder.setVibrate(longArrayOf(0)) 
+                builder.setFullScreenIntent(null, false)
+                try {
+                    context.startActivity(alarmActivityIntent)
+                } catch (e: Exception) { e.printStackTrace() }
+            } else {
+                // [v1.8.2-fix] 화면이 꺼져 있다면 시스템이 화면을 깨우도록 HIGH 채널과 MAX/ALARM 설정 유지
+                builder.setChannelId(ALARM_HIGH_CHANNEL_ID)
+                builder.setPriority(NotificationCompat.PRIORITY_MAX)
+                builder.setCategory(NotificationCompat.CATEGORY_ALARM)
+                builder.setFullScreenIntent(fullScreenPendingIntent, true)
             }
+            
+            // 알림 등록 (상태바 유지 및 중단 액션용)
+            notificationManager.notify(ALARM_NOTIFICATION_ID, builder.build())
+            startTimeoutCounter()
         } else {
+            // [v1.8.2-fix] 팝업 모드: 확실한 배너(HUN) 노출을 위해 MAX/ALARM 및 미세 진동 유지
+            builder.setFullScreenIntent(null, false)
+            builder.setPriority(NotificationCompat.PRIORITY_MAX)
+            builder.setCategory(NotificationCompat.CATEGORY_ALARM)
             builder.setDefaults(0)
             builder.setSound(null)
-            builder.setVibrate(longArrayOf(0))
+            builder.setVibrate(longArrayOf(0, 50)) 
+            
+            // 화면이 꺼져 있다면 WakeLock으로 깨워서 배너가 보이게 함
+            if (!isScreenOn) {
+                try {
+                    val wakeLock = pm.newWakeLock(
+                        android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK or
+                        android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                        "FocusFlow:PopupWakeLock"
+                    )
+                    wakeLock.acquire(5000L)
+                } catch (e: Exception) { e.printStackTrace() }
+            }
+
             notificationManager.notify(ALARM_NOTIFICATION_ID, builder.build())
         }
         
         alertJob?.cancel()
         alertJob = serviceScope.launch {
-            // [v1.7.6-fix] 전체 화면 알람(화면 꺼짐 대응)일 때는 지연 없이 즉시 소리 재생
-            // 팝업 알람일 때만 레이스 컨디션 방지를 위해 0.5초 지연
-            if (!forceFullScreen) {
-                delay(500)
+            // [v1.8.2-fix] 사운드 이질감 및 즉각성 균형 조정
+            // forceFullScreen(화면 꺼짐)일 때 800ms는 너무 길어 답답하므로 400ms로 단축
+            // 화면이 이미 켜져 있다면(isScreenOn) 더 빠르게 200ms만 대기
+            val startDelay = when {
+                !forceFullScreen -> 500L // 팝업 배너용
+                isScreenOn -> 200L // 화면 켜짐 + 전체화면 (즉시)
+                else -> 400L // 화면 꺼짐 + 전체화면 (전환 대기)
             }
+            delay(startDelay)
             
             if (!isLoopingActive && forceFullScreen) return@launch
 

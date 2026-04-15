@@ -172,15 +172,7 @@ class TimerService : Service() {
         _totalRemainingSeconds.value = initialTotalRemaining
         
         val notification = createSilentForegroundNotification()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(
-                NotificationHelper.SERVICE_NOTIFICATION_ID, 
-                notification,
-                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
-            )
-        } else {
-            startForeground(NotificationHelper.SERVICE_NOTIFICATION_ID, notification)
-        }
+        startForeground(NotificationHelper.SERVICE_NOTIFICATION_ID, notification)
 
         scheduleAllAlarms(initialTotalRemaining)
         updateTimeStates(initialTotalRemaining)
@@ -283,8 +275,10 @@ class TimerService : Service() {
         val currentTimeMillis = System.currentTimeMillis()
         val elapsedAtStart = (totalSecondsAtStart - initialRemainingSeconds).toLong()
         
-        // [v1.7.6-fix] 모든 알람을 미리 예약하지 않고, '다음 가장 가까운 알람' 하나만 예약합니다.
-        // 이는 Z플립 등에서 알람이 중복 울리거나 지연되는 현상을 방지합니다.
+        // [v1.8.2-fix] Doze 모드(절전) 대응 강화: 
+        // 1. setAlarmClock을 사용하여 시스템이 Doze 상태에서도 정확한 시간에 깨어나도록 보장
+        // 2. FLAG_CANCEL_CURRENT로 기존 예약을 확실히 파기하여 시스템 스케줄러를 새로고침
+        // 3. 알람 실행 시 FLAG_RECEIVER_FOREGROUND를 통해 리시버 지연 방지
         
         val focusSeconds = alarmIntervalMinutes * 60
         val restSeconds = restMinutes * 60
@@ -320,7 +314,7 @@ class TimerService : Service() {
             transitioningTo == BlockType.REST -> restSoundId
             else -> focusSoundId
         }
-        val isFullScreenMode = (currentSoundId == "ringtone") || useFullScreenAlarm
+        val isFullScreenMode = (soundEnabled && currentSoundId == "ringtone") || useFullScreenAlarm
         
         val displayTitle = taskTitle.ifEmpty { "집중 세션" }
         val statusTitle = when {

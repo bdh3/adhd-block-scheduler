@@ -1,6 +1,7 @@
 package com.focusflow.app.ui.screen
 
 import android.app.DatePickerDialog
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -13,6 +14,8 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.*
@@ -48,7 +51,7 @@ fun formatDuration(minutes: Int): String {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun CalendarScreen(
     viewModel: SchedulerViewModel,
@@ -63,35 +66,38 @@ fun CalendarScreen(
     var quickTaskTitle by remember { mutableStateOf("") }
     
     val isMonthlyView = uiState.isCalendarMonthlyView
-    val context = LocalContext.current
     
     // 주간/월간 드래그 확장을 위한 상태
     var calendarHeight by remember { mutableStateOf(100.dp) }
     val density = LocalDensity.current
-    val maxCalendarHeight = 420.dp // [수정] 6주 차 달력을 고려하여 높이 상한 확대
+    
+    // [v1.8.2] 주차 수에 따른 가변 높이 계산
+    val weeksInMonth = remember(selectedDate) { getWeeksInMonth(selectedDate) }
+    val maxCalendarHeight = when(weeksInMonth) {
+        4 -> 300.dp
+        5 -> 360.dp
+        else -> 420.dp
+    }
     val minCalendarHeight = 100.dp
+
+    // 높이 제한 보정
+    LaunchedEffect(maxCalendarHeight) {
+        if (calendarHeight > maxCalendarHeight) {
+            calendarHeight = maxCalendarHeight
+        }
+    }
+
+    var showYearMonthPicker by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { 
-                    // [v1.8.0] 타이틀 클릭 시 날짜 선택기(연도/월 이동 용이) 노출
+                    // [v1.8.2] 연/월 전용 선택기 도입
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.clickable {
-                            val cal = Calendar.getInstance().apply { timeInMillis = selectedDate }
-                            DatePickerDialog(
-                                context,
-                                { _, y, m, d ->
-                                    val newCal = Calendar.getInstance().apply {
-                                        set(y, m, d)
-                                    }
-                                    viewModel.selectDate(newCal.timeInMillis)
-                                },
-                                cal.get(Calendar.YEAR),
-                                cal.get(Calendar.MONTH),
-                                cal.get(Calendar.DAY_OF_MONTH)
-                            ).show()
+                            showYearMonthPicker = true
                         }
                     ) {
                         Text(
@@ -264,6 +270,21 @@ fun CalendarScreen(
                 }
             }
         }
+    }
+
+    if (showYearMonthPicker) {
+        YearMonthPickerDialog(
+            initialDate = selectedDate,
+            onDismiss = { showYearMonthPicker = false },
+            onDateSelected = { y, m ->
+                val newCal = Calendar.getInstance().apply {
+                    timeInMillis = selectedDate
+                    set(Calendar.YEAR, y)
+                    set(Calendar.MONTH, m)
+                }
+                viewModel.selectDate(newCal.timeInMillis)
+            }
+        )
     }
 
     if (showAddTaskDialog) {
@@ -815,6 +836,7 @@ fun WeeklyCalendarStrip(
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun MonthlyCalendarView(
     selectedDate: Long,
@@ -822,15 +844,82 @@ fun MonthlyCalendarView(
     onDateSelected: (Long) -> Unit,
     onMonthChange: (Long) -> Unit
 ) {
+    // [v1.8.2] HorizontalPager를 이용한 월 전환 애니메이션 구현
+    val baseDate = remember { 
+        Calendar.getInstance().apply { 
+            timeInMillis = selectedDate
+            set(Calendar.DAY_OF_MONTH, 1)
+            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+        }.timeInMillis 
+    }
+    
+    val pagerState = rememberPagerState(initialPage = 500) { 1000 }
+    
+    // 페이저 페이지 변경 감지 -> ViewModel 상태 업데이트
+    LaunchedEffect(pagerState.currentPage) {
+        val monthOffset = pagerState.currentPage - 500
+        val targetCal = Calendar.getInstance().apply {
+            timeInMillis = baseDate
+            add(Calendar.MONTH, monthOffset)
+        }
+        if (!isSameMonth(targetCal.timeInMillis, selectedDate)) {
+            // 날짜는 유지하되 월만 변경하려고 시도 (단, 해당 월의 말일 체크 필요)
+            val currentCal = Calendar.getInstance().apply { timeInMillis = selectedDate }
+            val newCal = targetCal.apply {
+                val day = currentCal.get(Calendar.DAY_OF_MONTH).coerceAtMost(getActualMaximum(Calendar.DAY_OF_MONTH))
+                set(Calendar.DAY_OF_MONTH, day)
+            }
+            onMonthChange(newCal.timeInMillis)
+        }
+    }
+
+    // 외부에서 selectedDate 변경 시 페이저 동기화
+    LaunchedEffect(selectedDate) {
+        val cal = Calendar.getInstance().apply { timeInMillis = selectedDate }
+        val bCal = Calendar.getInstance().apply { timeInMillis = baseDate }
+        val monthDiff = (cal.get(Calendar.YEAR) - bCal.get(Calendar.YEAR)) * 12 +
+                (cal.get(Calendar.MONTH) - bCal.get(Calendar.MONTH))
+        val targetPage = 500 + monthDiff
+        if (pagerState.currentPage != targetPage) {
+            pagerState.animateScrollToPage(targetPage)
+        }
+    }
+
+    HorizontalPager(
+        state = pagerState,
+        modifier = Modifier.fillMaxSize(),
+        verticalAlignment = Alignment.Top
+    ) { page ->
+        val monthOffset = page - 500
+        val displayMonthCal = Calendar.getInstance().apply {
+            timeInMillis = baseDate
+            add(Calendar.MONTH, monthOffset)
+        }
+        
+        MonthPageContent(
+            displayMonth = displayMonthCal.timeInMillis,
+            selectedDate = selectedDate,
+            allSchedules = allSchedules,
+            onDateSelected = onDateSelected
+        )
+    }
+}
+
+@Composable
+fun MonthPageContent(
+    displayMonth: Long,
+    selectedDate: Long,
+    allSchedules: List<ScheduleBlock>,
+    onDateSelected: (Long) -> Unit
+) {
     val calendar = Calendar.getInstance().apply { 
-        timeInMillis = selectedDate
+        timeInMillis = displayMonth
         set(Calendar.DAY_OF_MONTH, 1)
-        set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
     }
     val daysInMonth = calendar.getActualMaximum(Calendar.DAY_OF_MONTH)
     val firstDayOfWeek = calendar.get(Calendar.DAY_OF_WEEK) - 1
 
-    val days = remember(selectedDate) {
+    val days = remember(displayMonth) {
         val list = mutableListOf<Long?>()
         repeat(firstDayOfWeek) { list.add(null) }
         val tempCal = calendar.clone() as Calendar
@@ -838,7 +927,7 @@ fun MonthlyCalendarView(
             list.add(tempCal.timeInMillis)
             tempCal.add(Calendar.DAY_OF_MONTH, 1)
         }
-        // 6주(42일)를 꽉 채워 높이 불균형 해소
+        // 6주(42일)를 꽉 채움
         while (list.size < 42) {
             list.add(null)
         }
@@ -849,29 +938,6 @@ fun MonthlyCalendarView(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp)
-            .draggable(
-                orientation = Orientation.Horizontal,
-                state = rememberDraggableState { _ ->
-                    // 드래그 중인 모션은 시각적으로 처리하지 않고 속도만 감지
-                },
-                onDragStopped = { velocity ->
-                    if (velocity > 300f) {
-                        // 이전 달
-                        val newCal = Calendar.getInstance().apply { 
-                            timeInMillis = selectedDate
-                            add(Calendar.MONTH, -1)
-                        }
-                        onMonthChange(newCal.timeInMillis)
-                    } else if (velocity < -300f) {
-                        // 다음 달
-                        val newCal = Calendar.getInstance().apply { 
-                            timeInMillis = selectedDate
-                            add(Calendar.MONTH, 1)
-                        }
-                        onMonthChange(newCal.timeInMillis)
-                    }
-                }
-            )
     ) {
         // 요일 헤더
         Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.SpaceAround) {
@@ -949,6 +1015,91 @@ fun MonthlyCalendarView(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun YearMonthPickerDialog(
+    initialDate: Long,
+    onDismiss: () -> Unit,
+    onDateSelected: (year: Int, month: Int) -> Unit
+) {
+    val cal = Calendar.getInstance().apply { timeInMillis = initialDate }
+    var selectedYear by remember { mutableIntStateOf(cal.get(Calendar.YEAR)) }
+    var selectedMonth by remember { mutableIntStateOf(cal.get(Calendar.MONTH)) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("연/월 선택") },
+        text = {
+            Row(
+                modifier = Modifier.fillMaxWidth().height(240.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                YearMonthPickerColumn(
+                    items = (2000..2100).toList(),
+                    selectedItem = selectedYear,
+                    onItemSelected = { selectedYear = it },
+                    label = { "${it}년" },
+                    modifier = Modifier.weight(1f)
+                )
+                YearMonthPickerColumn(
+                    items = (0..11).toList(),
+                    selectedItem = selectedMonth,
+                    onItemSelected = { selectedMonth = it },
+                    label = { "${it + 1}월" },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { 
+                onDateSelected(selectedYear, selectedMonth)
+                onDismiss()
+            }) {
+                Text("확인")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("취소")
+            }
+        }
+    )
+}
+
+@Composable
+fun <T> YearMonthPickerColumn(
+    items: List<T>,
+    selectedItem: T,
+    onItemSelected: (T) -> Unit,
+    label: (T) -> String,
+    modifier: Modifier = Modifier
+) {
+    val initialIndex = items.indexOf(selectedItem).coerceAtLeast(0)
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = (initialIndex - 2).coerceAtLeast(0))
+    
+    LazyColumn(
+        state = listState,
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        contentPadding = PaddingValues(vertical = 80.dp) // 중앙 정렬 효과를 위한 패딩
+    ) {
+        items(items.size) { index ->
+            val item = items[index]
+            val isSelected = item == selectedItem
+            Text(
+                text = label(item),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onItemSelected(item) }
+                    .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) else Color.Transparent)
+                    .padding(vertical = 12.dp),
+                textAlign = TextAlign.Center,
+                style = if (isSelected) MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        else MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+            )
         }
     }
 }
@@ -1100,6 +1251,23 @@ private fun isSameDay(m1: Long, m2: Long): Boolean {
     val cal2 = Calendar.getInstance().apply { timeInMillis = m2 }
     return cal1.get(Calendar.YEAR) == cal2.get(Calendar.YEAR) &&
            cal1.get(Calendar.DAY_OF_YEAR) == cal2.get(Calendar.DAY_OF_YEAR)
+}
+
+private fun isSameMonth(m1: Long, m2: Long): Boolean {
+    val cal1 = Calendar.getInstance().apply { timeInMillis = m1 }
+    val cal2 = Calendar.getInstance().apply { timeInMillis = m2 }
+    return cal1.get(Calendar.YEAR) == cal2.get(Calendar.YEAR) &&
+           cal1.get(Calendar.MONTH) == cal2.get(Calendar.MONTH)
+}
+
+private fun getWeeksInMonth(dateMillis: Long): Int {
+    val cal = Calendar.getInstance().apply {
+        timeInMillis = dateMillis
+        set(Calendar.DAY_OF_MONTH, 1)
+    }
+    val firstDayOfWeek = cal.get(Calendar.DAY_OF_WEEK) - 1 // 0 for Sunday
+    val daysInMonth = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+    return Math.ceil((firstDayOfWeek + daysInMonth).toDouble() / 7).toInt()
 }
 
 private fun isToday(m1: Long): Boolean {

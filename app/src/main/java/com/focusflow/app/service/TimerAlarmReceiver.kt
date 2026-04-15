@@ -12,11 +12,14 @@ class TimerAlarmReceiver : BroadcastReceiver() {
         // [v1.7.6-fix] 구버전에서 예약된 '좀비 알람' 차단
         // 현재는 고정된 액션 "com.focusflow.app.ALARM_ACTION"만 사용합니다.
         val action = intent.action
-        if (action != null && action.startsWith("com.focusflow.app.ALARM_RECV_")) {
-            return // 옛날 방식의 알람은 무시
-        }
-        // [v1.7.3] 서비스가 종료된 상태라면 예약된 알람을 무시 (중지 후 잔여 알람 방지)
-        if (!TimerService.isServiceRunning) return
+        // [v1.8.2-fix] Doze 모드에서 프로세스가 새로 시작될 경우 isServiceRunning이 false일 수 있음.
+        // 액션이 확실하다면 알람을 울리도록 보장하여 지연 현상 방지.
+        if (action != "com.focusflow.app.ALARM_ACTION") return
+
+        // [v1.8.2-fix] 리시버가 실행되는 동안 CPU가 잠들지 않도록 즉시 WakeLock 획득
+        val pm = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+        val wl = pm.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "FocusFlow:ReceiverWakeLock")
+        wl.acquire(5000L)
 
         val taskTitle = intent.getStringExtra("taskTitle") ?: "작업"
         val elapsedMinutes = intent.getIntExtra("elapsedMinutes", 0)

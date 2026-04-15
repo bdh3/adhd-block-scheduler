@@ -221,7 +221,7 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                                     .fillMaxHeight()
                                     .clip(MaterialTheme.shapes.medium)
                                     .background(if (!isCycleMode) MaterialTheme.colorScheme.primary else Color.Transparent)
-                                    .clickable { 
+                                    .clickable(enabled = !uiState.isTimerActive) { 
                                         isCycleMode = false
                                         alarmInterval = 15
                                         restMinutes = 0
@@ -231,7 +231,9 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                                 Text(
                                     "연속", 
                                     style = MaterialTheme.typography.labelMedium,
-                                    color = if (!isCycleMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = if (!isCycleMode) MaterialTheme.colorScheme.onPrimary 
+                                            else if (uiState.isTimerActive) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+                                            else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                             Box(
@@ -240,7 +242,7 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                                     .fillMaxHeight()
                                     .clip(MaterialTheme.shapes.medium)
                                     .background(if (isCycleMode) MaterialTheme.colorScheme.primary else Color.Transparent)
-                                    .clickable { 
+                                    .clickable(enabled = !uiState.isTimerActive) { 
                                         isCycleMode = true
                                         if (restMinutes == 0) {
                                             alarmInterval = 25
@@ -252,7 +254,9 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                                 Text(
                                     "사이클", 
                                     style = MaterialTheme.typography.labelMedium,
-                                    color = if (isCycleMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = if (isCycleMode) MaterialTheme.colorScheme.onPrimary 
+                                            else if (uiState.isTimerActive) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+                                            else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
@@ -281,7 +285,7 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                                             modifier = Modifier
                                                 .weight(1f)
                                                 .height(48.dp)
-                                                .clickable { alarmInterval = interval },
+                                                .clickable(enabled = !uiState.isTimerActive) { alarmInterval = interval },
                                             shape = MaterialTheme.shapes.medium,
                                             color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
                                             border = if (isSelected) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
@@ -290,7 +294,9 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                                                 Text(
                                                     if (interval >= 60) "${interval / 60}시간" else "${interval}분",
                                                     style = MaterialTheme.typography.bodyMedium,
-                                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimary 
+                                                            else if (uiState.isTimerActive) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                                            else MaterialTheme.colorScheme.onSurface
                                                 )
                                             }
                                         }
@@ -308,7 +314,7 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                                             modifier = Modifier
                                                 .weight(1f)
                                                 .height(56.dp)
-                                                .clickable { 
+                                                .clickable(enabled = !uiState.isTimerActive) { 
                                                     alarmInterval = f
                                                     restMinutes = r
                                                 },
@@ -325,13 +331,17 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                                                         imageVector = if (f == 25) Icons.Default.Timer else Icons.Default.Star,
                                                         contentDescription = null,
                                                         modifier = Modifier.size(14.dp),
-                                                        tint = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
+                                                        tint = if (isSelected) MaterialTheme.colorScheme.onPrimary 
+                                                                else if (uiState.isTimerActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.38f)
+                                                                else MaterialTheme.colorScheme.primary
                                                     )
                                                     Spacer(modifier = Modifier.width(4.dp))
                                                     Text(
                                                         "${f}/${r}",
                                                         style = MaterialTheme.typography.labelLarge,
-                                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimary 
+                                                                else if (uiState.isTimerActive) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                                                else MaterialTheme.colorScheme.onSurface
                                                     )
                                                 }
                                                 Text(
@@ -374,6 +384,7 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                                                     alarmInterval = (it.toInt() / 5) * 5
                                                     restMinutes = getValidRestFor60(alarmInterval, restMinutes)
                                                 },
+                                                enabled = !uiState.isTimerActive,
                                                 valueRange = 5f..55f,
                                                 modifier = Modifier.weight(1f),
                                                 steps = 9 // 5, 10, 15, ..., 55
@@ -390,6 +401,7 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                                                         .minByOrNull { d -> abs((d - alarmInterval) - requestedRest) } ?: 60
                                                     restMinutes = targetSum - alarmInterval
                                                 },
+                                                enabled = !uiState.isTimerActive,
                                                 valueRange = 1f..(60 - alarmInterval).toFloat(),
                                                 modifier = Modifier.weight(1f),
                                                 steps = (60 - alarmInterval - 1).coerceAtLeast(0)
@@ -416,6 +428,7 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                                                 onValueChange = { 
                                                     defaultTotalMinutes = (it.toInt() / 30) * 30
                                                 },
+                                                enabled = !uiState.isTimerActive,
                                                 valueRange = 30f..480f,
                                                 modifier = Modifier.weight(1f),
                                                 steps = 14
@@ -458,9 +471,9 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                             label = "집중 시작",
                             selectedId = focusSoundId,
                             ringtoneName = focusRingtoneName,
+                            enabled = !uiState.isTimerActive,
                             onSelected = { 
                                 focusSoundId = it
-                                viewModel.setFocusSound(it)
                                 // 벨소리가 아닐 때만 미리듣기 재생 (벨소리는 피커에서 자체 재생됨)
                                 if (it != "ringtone") {
                                     viewModel.previewSound(it, "focus")
@@ -479,9 +492,9 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                             label = "휴식 시작",
                             selectedId = restSoundId,
                             ringtoneName = restRingtoneName,
+                            enabled = !uiState.isTimerActive,
                             onSelected = { 
                                 restSoundId = it
-                                viewModel.setRestSound(it)
                                 // 벨소리가 아닐 때만 미리듣기 재생
                                 if (it != "ringtone") {
                                     viewModel.previewSound(it, "rest")
@@ -500,9 +513,9 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                             label = "전체 종료",
                             selectedId = finishSoundId,
                             ringtoneName = finishRingtoneName,
+                            enabled = !uiState.isTimerActive,
                             onSelected = { 
                                 finishSoundId = it
-                                viewModel.setFinishSound(it)
                                 // 벨소리가 아닐 때만 미리듣기 재생
                                 if (it != "ringtone") {
                                     viewModel.previewSound(it, "finish")
@@ -543,9 +556,9 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                         VibrationPatternSelector(
                             label = "집중 시작",
                             selectedId = focusPatternId,
+                            enabled = !uiState.isTimerActive,
                             onSelected = { 
                                 focusPatternId = it
-                                viewModel.setFocusVibrationPattern(it)
                                 viewModel.previewVibration(it)
                             },
                         )
@@ -554,9 +567,9 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                         VibrationPatternSelector(
                             label = "휴식 시작",
                             selectedId = restPatternId,
+                            enabled = !uiState.isTimerActive,
                             onSelected = { 
                                 restPatternId = it
-                                viewModel.setRestVibrationPattern(it)
                                 viewModel.previewVibration(it)
                             },
                         )
@@ -565,9 +578,9 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                         VibrationPatternSelector(
                             label = "전체 종료",
                             selectedId = finishPatternId,
+                            enabled = !uiState.isTimerActive,
                             onSelected = { 
                                 finishPatternId = it
-                                viewModel.setFinishVibrationPattern(it)
                                 viewModel.previewVibration(it)
                             },
                         )
@@ -791,6 +804,7 @@ fun SoundPatternSelector(
     label: String,
     selectedId: String,
     ringtoneName: String,
+    enabled: Boolean = true,
     onSelected: (String) -> Unit,
     onRingtoneClick: () -> Unit,
     onStopPreview: () -> Unit
@@ -804,7 +818,7 @@ fun SoundPatternSelector(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { expanded = true }
+                .clickable(enabled = enabled) { expanded = true }
                 .padding(vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -813,13 +827,15 @@ fun SoundPatternSelector(
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.bodyMedium,
                 maxLines = 1,
-                color = if (selectedId == "ringtone") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                color = if (!enabled) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                        else if (selectedId == "ringtone") MaterialTheme.colorScheme.primary 
+                        else MaterialTheme.colorScheme.onSurface
             )
             Icon(
                 imageVector = Icons.Default.ArrowDropDown,
                 contentDescription = null,
                 modifier = Modifier.size(20.dp),
-                tint = MaterialTheme.colorScheme.primary
+                tint = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.38f)
             )
         }
         DropdownMenu(
@@ -857,6 +873,7 @@ fun SoundPatternSelector(
 fun VibrationPatternSelector(
     label: String,
     selectedId: String,
+    enabled: Boolean = true,
     onSelected: (String) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -868,7 +885,7 @@ fun VibrationPatternSelector(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { expanded = true }
+                .clickable(enabled = enabled) { expanded = true }
                 .padding(vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -876,13 +893,14 @@ fun VibrationPatternSelector(
                 text = currentPattern.displayName,
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.bodyMedium,
-                maxLines = 1
+                maxLines = 1,
+                color = if (!enabled) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f) else MaterialTheme.colorScheme.onSurface
             )
             Icon(
                 imageVector = Icons.Default.ArrowDropDown,
                 contentDescription = null,
                 modifier = Modifier.size(20.dp),
-                tint = MaterialTheme.colorScheme.primary
+                tint = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.38f)
             )
         }
         DropdownMenu(

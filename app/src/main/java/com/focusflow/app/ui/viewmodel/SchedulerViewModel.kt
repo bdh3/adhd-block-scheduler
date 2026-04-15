@@ -424,9 +424,9 @@ class SchedulerViewModel(
         }
 
         // [v1.7.3] 알람 노출 모드 결정 트리 (README_ALARM.md 규칙 1, 2, 3 준수)
-        // 1. 벨소리(ringtone)라면 무조건 전체 화면
+        // 1. 벨소리(ringtone)이 활성화(soundEnabled)된 경우 무조건 전체 화면
         // 2. 그 외에는 유저의 useFullScreenAlarm 설정을 따름 (종료 알람 포함)
-        val useFullScreen = currentSoundId == "ringtone" || state.useFullScreenAlarm
+        val useFullScreen = (state.soundEnabled && currentSoundId == "ringtone") || state.useFullScreenAlarm
 
         notificationHelper.showBlockTransitionNotification(
             taskTitle = taskTitle, 

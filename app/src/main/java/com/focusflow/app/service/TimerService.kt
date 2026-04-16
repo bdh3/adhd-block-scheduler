@@ -187,16 +187,18 @@ class TimerService : Service() {
                 val now = SystemClock.elapsedRealtime()
                 val remainingMillis = targetEndTimeMillis - now
                 
-                if (!powerManager.isInteractive && remainingMillis > 5000) {
-                    delay(1000) 
-                    continue
+                val currentTotalRemaining = ((remainingMillis + 500) / 1000).toInt()
+                _totalRemainingSeconds.value = currentTotalRemaining
+
+                if (!powerManager.isInteractive) {
+                    // [v1.8.5-fix] 화면이 꺼져 있는 동안은 루프에서 알람(onTransition)을 트리거하지 않음.
+                    // 알람은 AlarmManager에 의해 정확한 시간에 TimerAlarmReceiver에서 실행됨.
+                    updateTimeStates(currentTotalRemaining, isSilent = true)
+                } else {
+                    updateTimeStates(currentTotalRemaining)
                 }
 
                 if (remainingMillis <= 0) break
-                
-                val currentTotalRemaining = ((remainingMillis + 500) / 1000).toInt()
-                _totalRemainingSeconds.value = currentTotalRemaining
-                updateTimeStates(currentTotalRemaining)
                 delay(1000L) 
             }
             if (_isRunning.value && SystemClock.elapsedRealtime() >= targetEndTimeMillis) {
@@ -205,7 +207,7 @@ class TimerService : Service() {
         }
     }
 
-    private fun updateTimeStates(currentTotalRemaining: Int, isManualSkip: Boolean = false) {
+    private fun updateTimeStates(currentTotalRemaining: Int, isManualSkip: Boolean = false, isSilent: Boolean = false) {
         val focusSeconds = alarmIntervalMinutes * 60
         val restSeconds = restMinutes * 60
         val cycleSeconds = focusSeconds + restSeconds
@@ -224,24 +226,27 @@ class TimerService : Service() {
         
         if (newBlockIndex != _currentBlockIndex.value && currentTotalRemaining > 0) {
             _currentBlockIndex.value = newBlockIndex
-            val transitioningTo = if (restSeconds > 0 && (sessionElapsedSeconds % cycleSeconds) >= focusSeconds) BlockType.REST else BlockType.FOCUS
             
-            val isDefault = taskTitle.isEmpty()
-            val displayTitle = if (isDefault) "집중 세션" else taskTitle
-            
-            val statusTitle = when {
-                transitioningTo == BlockType.REST -> "$displayTitle: 휴식 시작"
-                newBlockIndex >= 2 && restSeconds <= 0 -> "$displayTitle: 집중"
-                else -> "$displayTitle: 집중 시작"
-            }
-            
-            updateForegroundNotification(if(transitioningTo == BlockType.REST) "$displayTitle: 휴식 중" else "$displayTitle: 집중 중")
-            onTransition?.invoke(statusTitle, (sessionElapsedSeconds / 60), false, transitioningTo, isManualSkip)
+            if (!isSilent) {
+                val transitioningTo = if (restSeconds > 0 && (sessionElapsedSeconds % cycleSeconds) >= focusSeconds) BlockType.REST else BlockType.FOCUS
+                
+                val isDefault = taskTitle.isEmpty()
+                val displayTitle = if (isDefault) "집중 세션" else taskTitle
+                
+                val statusTitle = when {
+                    transitioningTo == BlockType.REST -> "$displayTitle: 휴식 시작"
+                    newBlockIndex >= 2 && restSeconds <= 0 -> "$displayTitle: 집중"
+                    else -> "$displayTitle: 집중 시작"
+                }
+                
+                updateForegroundNotification(if(transitioningTo == BlockType.REST) "$displayTitle: 휴식 중" else "$displayTitle: 집중 중")
+                onTransition?.invoke(statusTitle, (sessionElapsedSeconds / 60), false, transitioningTo, isManualSkip)
 
-            // [v1.7.6-fix] 구간 전환 알람이 울린 직후, 다음 구간 알람을 예약합니다.
-            // (Single Step Scheduling)
-            if (currentTotalRemaining > 0) {
-                scheduleAllAlarms(currentTotalRemaining)
+                // [v1.7.6-fix] 구간 전환 알람이 울린 직후, 다음 구간 알람을 예약합니다.
+                // (Single Step Scheduling)
+                if (currentTotalRemaining > 0) {
+                    scheduleAllAlarms(currentTotalRemaining)
+                }
             }
         }
         _remainingSeconds.value = currentBlockRemaining

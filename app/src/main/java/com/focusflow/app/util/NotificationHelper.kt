@@ -1,5 +1,6 @@
 package com.focusflow.app.util
 
+import android.app.KeyguardManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -39,12 +40,11 @@ class NotificationHelper private constructor(private val context: Context) {
     private var isLoopingActive = false
     private var vibrationJob: Job? = null
     private var timeoutJob: Job? = null
-    private var alertJob: Job? = null // [v1.7.6-patch] 소리/진동 실행 대기열 관리용
+    private var alertJob: Job? = null 
 
     fun isAlarmRunning(): Boolean = isLoopingActive
 
     companion object {
-        // [v1.7.6-recovery] 채널 중요도 강제 초기화를 위해 ID 변경
         const val ALARM_HIGH_CHANNEL_ID = "focus_flow_alarm_v15_emergency"
         const val SILENT_SERVICE_CHANNEL_ID = "focus_flow_service_v13"
         const val SERVICE_NOTIFICATION_ID = 1000
@@ -76,9 +76,8 @@ class NotificationHelper private constructor(private val context: Context) {
                 description = "구간 전환 및 종료 시 알람을 표시합니다."
                 enableLights(true)
                 lightColor = android.graphics.Color.RED
-                // [v1.7.6-patch] 채널 레벨에서 진동을 활성화해야 FSI 확률이 높아짐
                 enableVibration(true)
-                vibrationPattern = longArrayOf(0, 1) // 시스템이 '진동 있음'으로 인식하게 유도
+                vibrationPattern = longArrayOf(0, 1) 
                 setSound(null, null)
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
                 setBypassDnd(true)
@@ -119,6 +118,15 @@ class NotificationHelper private constructor(private val context: Context) {
         useFullScreen: Boolean = false,
         isManualSkip: Boolean = false
     ) {
+        val pm = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+        val kgm = context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+        val isScreenOn = pm.isInteractive
+        // val isLocked = kgm.isKeyguardLocked // [v1.8.5-fix] 잠금 여부와 상관없이 startActivity 호출로 일원화
+
+        // [v1.8.3-fix] 중복 알람 방지 강화:
+        // 이미 루핑 알람(전체화면)이 실행 중인데, 수동 넘기기(isManualSkip)가 아닌 자동 전환 호출인 경우 스킵.
+        if (isLoopingActive && !isManualSkip) return
+
         if (elapsedMinutes == 0 && !isFinished) return
 
         val elapsedText = when {
@@ -167,7 +175,6 @@ class NotificationHelper private constructor(private val context: Context) {
             putExtra("isFinished", isFinished)
         }
 
-        // [v1.7.6-final] 알림에서 직접 중단할 수 있는 액션 추가 (잠금 화면 대응)
         val stopIntent = Intent(context, TimerService::class.java).apply {
             putExtra("stop_alarm", true)
             putExtra("isFinished", isFinished)
@@ -189,7 +196,7 @@ class NotificationHelper private constructor(private val context: Context) {
             .setContentTitle(displayTitle)
             .setContentText(message)
             .setContentIntent(pendingIntent)
-            .addAction(R.drawable.ic_launcher_foreground, "알람 중단", stopPendingIntent) // 액션 버튼 추가
+            .addAction(R.drawable.ic_launcher_foreground, "알람 중단", stopPendingIntent)
             .setAutoCancel(true)
             .setOngoing(forceFullScreen)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
@@ -200,66 +207,50 @@ class NotificationHelper private constructor(private val context: Context) {
             .setSound(null)
             .setVibrate(longArrayOf(0))
 
-        // [v1.8.2-fix] 팝업 알림 모드에서도 화면이 꺼져있을 때 안정적으로 알람을 인지할 수 있도록 WakeLock 통합 관리
-        // 특히 BroadcastReceiver 종료 후 코루틴 지연 시간(500ms) 동안 CPU가 잠드는 것을 방지
+        // WakeLock 획득 (화면 깨우기 보조)
         try {
-            val pm = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
             val wakeLock = pm.newWakeLock(
                 android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK or
                 android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP or
                 android.os.PowerManager.ON_AFTER_RELEASE,
                 "FocusFlow:AlarmWakeLock"
             )
-            // 소리/진동 코루틴이 시작되고 안정적으로 실행될 수 있도록 10초간 유지
             wakeLock.acquire(10000L) 
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-
-        val pm = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
-        val isScreenOn = pm.isInteractive
+        } catch (e: Exception) { e.printStackTrace() }
 
         if (forceFullScreen) {
-            // [v1.8.2-hotfix] 전체 화면 알람(FSI)은 반드시 HIGH 이상의 채널과 MAX 우선순위가 필요함
-            // 화면 켜짐 여부와 상관없이 FSI 권한을 확보하기 위해 채널과 우선순위를 ALARM_HIGH/MAX로 고정
-            builder.setChannelId(ALARM_HIGH_CHANNEL_ID)
+            // [v1.8.5-fix] FSI 보장 및 잠금 해제 후 증발 방지
+            // 1. setOnlyAlertOnce(true) 제거 유지
+            // 2. 잠금 여부와 상관없이 startActivity 호출 (HUN에 묻히는 것 방지)
+            // 3. 잠금 해제 시에도 AlarmActivity가 최상단에 뜨도록 유도
             builder.setPriority(NotificationCompat.PRIORITY_MAX)
             builder.setCategory(NotificationCompat.CATEGORY_ALARM)
             builder.setFullScreenIntent(fullScreenPendingIntent, true)
+            builder.setOngoing(true) // 알람이 진행 중임을 명시 (스와이프로 제거 불가)
             
-            if (isScreenOn) {
-                // 화면이 이미 켜져 있는 경우, 배너(HUN)와 액티비티가 겹치는 혼란을 줄이기 위해
-                // 시스템에 '한 번만 알림'을 요청하고 직접 액티비티를 선제적으로 호출 시도
-                builder.setOnlyAlertOnce(true)
-                try {
-                    context.startActivity(alarmActivityIntent)
-                } catch (e: Exception) {
-                    // startActivity 실패 시에도 FSI(fullScreenIntent)가 백업으로 작동함
-                    e.printStackTrace() 
-                }
-            }
+            try {
+                // [중요] 잠금 상태에서도 startActivity를 호출하면, 
+                // 일부 기기에서 FSI보다 더 확실하게 액티비티를 띄워줌.
+                context.startActivity(alarmActivityIntent)
+            } catch (e: Exception) { e.printStackTrace() }
             
-            // 알림 등록 (상태바 유지 및 중단 액션용)
             notificationManager.notify(ALARM_NOTIFICATION_ID, builder.build())
             startTimeoutCounter()
         } else {
-            // [v1.8.2-fix] 팝업 모드: 확실한 배너(HUN) 노출을 위해 MAX/ALARM 및 미세 진동 유지
+            // 팝업 모드
             builder.setFullScreenIntent(null, false)
             builder.setPriority(NotificationCompat.PRIORITY_MAX)
             builder.setCategory(NotificationCompat.CATEGORY_ALARM)
-            builder.setDefaults(0)
-            builder.setSound(null)
             builder.setVibrate(longArrayOf(0, 50)) 
             
-            // 화면이 꺼져 있다면 WakeLock으로 깨워서 배너가 보이게 함
             if (!isScreenOn) {
                 try {
-                    val wakeLock = pm.newWakeLock(
+                    val wl = pm.newWakeLock(
                         android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK or
                         android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP,
                         "FocusFlow:PopupWakeLock"
                     )
-                    wakeLock.acquire(5000L)
+                    wl.acquire(5000L)
                 } catch (e: Exception) { e.printStackTrace() }
             }
 
@@ -268,13 +259,12 @@ class NotificationHelper private constructor(private val context: Context) {
         
         alertJob?.cancel()
         alertJob = serviceScope.launch {
-            // [v1.8.2-fix] 사운드 이질감 및 즉각성 균형 조정
-            // forceFullScreen(화면 꺼짐)일 때 800ms는 너무 길어 답답하므로 400ms로 단축
-            // 화면이 이미 켜져 있다면(isScreenOn) 더 빠르게 200ms만 대기
+            // [v1.8.5-fix] 사운드 재생 타이밍 조절
+            // 화면이 켜지고 액티비티가 뜰 시간을 충분히 확보 (500ms -> 800ms)
             val startDelay = when {
-                !forceFullScreen -> 500L // 팝업 배너용
-                isScreenOn -> 200L // 화면 켜짐 + 전체화면 (즉시)
-                else -> 400L // 화면 꺼짐 + 전체화면 (전환 대기)
+                !forceFullScreen -> 800L
+                isScreenOn -> 400L
+                else -> 1000L
             }
             delay(startDelay)
             
@@ -423,6 +413,8 @@ class NotificationHelper private constructor(private val context: Context) {
         timeoutJob?.cancel()
         getVibrator().cancel()
         stopSoundOnly()
+        // [v1.8.3-fix] 알람 중단 시 알림도 명시적으로 제거하여 다음 알람의 정시성(Fresh start) 확보
+        notificationManager.cancel(ALARM_NOTIFICATION_ID)
     }
 
     private fun stopSoundOnly() {

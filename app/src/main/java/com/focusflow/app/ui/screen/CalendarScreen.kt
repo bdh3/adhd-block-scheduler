@@ -844,44 +844,54 @@ fun MonthlyCalendarView(
     onDateSelected: (Long) -> Unit,
     onMonthChange: (Long) -> Unit
 ) {
-    // [v1.8.2] HorizontalPager를 이용한 월 전환 애니메이션 구현
-    val baseDate = remember { 
-        Calendar.getInstance().apply { 
-            timeInMillis = selectedDate
+    // [v1.8.3] 기준점을 앱 실행 시점의 '오늘'로 고정하여 오프셋 누적 방지
+    val baseDate = remember {
+        Calendar.getInstance().apply {
             set(Calendar.DAY_OF_MONTH, 1)
             set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-        }.timeInMillis 
+        }.timeInMillis
     }
-    
+
+    // 500번 페이지가 baseDate(현재 월)가 됨
     val pagerState = rememberPagerState(initialPage = 500) { 1000 }
-    
-    // 페이저 페이지 변경 감지 -> ViewModel 상태 업데이트
-    LaunchedEffect(pagerState.currentPage) {
-        val monthOffset = pagerState.currentPage - 500
-        val targetCal = Calendar.getInstance().apply {
-            timeInMillis = baseDate
-            add(Calendar.MONTH, monthOffset)
-        }
-        if (!isSameMonth(targetCal.timeInMillis, selectedDate)) {
-            // 날짜는 유지하되 월만 변경하려고 시도 (단, 해당 월의 말일 체크 필요)
-            val currentCal = Calendar.getInstance().apply { timeInMillis = selectedDate }
-            val newCal = targetCal.apply {
-                val day = currentCal.get(Calendar.DAY_OF_MONTH).coerceAtMost(getActualMaximum(Calendar.DAY_OF_MONTH))
-                set(Calendar.DAY_OF_MONTH, day)
+
+    // [v1.8.3] 페이저 스크롤이 완전히 끝났을 때만 ViewModel 날짜 업데이트 (핀트 어긋남 방지)
+    LaunchedEffect(pagerState) {
+        snapshotFlow { 
+            if (pagerState.isScrollInProgress) -1 else pagerState.currentPage 
+        }.collect { page ->
+            if (page != -1) {
+                val monthOffset = page - 500
+                val targetCal = Calendar.getInstance().apply {
+                    timeInMillis = baseDate
+                    add(Calendar.MONTH, monthOffset)
+                }
+                
+                // 현재 선택된 날짜와 월이 다른 경우에만 업데이트
+                if (!isSameMonth(targetCal.timeInMillis, selectedDate)) {
+                    val currentCal = Calendar.getInstance().apply { timeInMillis = selectedDate }
+                    val newCal = targetCal.apply {
+                        val day = currentCal.get(Calendar.DAY_OF_MONTH).coerceAtMost(getActualMaximum(Calendar.DAY_OF_MONTH))
+                        set(Calendar.DAY_OF_MONTH, day)
+                    }
+                    onMonthChange(newCal.timeInMillis)
+                }
             }
-            onMonthChange(newCal.timeInMillis)
         }
     }
 
-    // 외부에서 selectedDate 변경 시 페이저 동기화
+    // 외부에서 selectedDate(오늘 버튼 등) 변경 시 페이저를 해당 월로 이동
     LaunchedEffect(selectedDate) {
-        val cal = Calendar.getInstance().apply { timeInMillis = selectedDate }
-        val bCal = Calendar.getInstance().apply { timeInMillis = baseDate }
-        val monthDiff = (cal.get(Calendar.YEAR) - bCal.get(Calendar.YEAR)) * 12 +
-                (cal.get(Calendar.MONTH) - bCal.get(Calendar.MONTH))
+        val selCal = Calendar.getInstance().apply { timeInMillis = selectedDate }
+        val baseCal = Calendar.getInstance().apply { timeInMillis = baseDate }
+        
+        val monthDiff = (selCal.get(Calendar.YEAR) - baseCal.get(Calendar.YEAR)) * 12 +
+                (selCal.get(Calendar.MONTH) - baseCal.get(Calendar.MONTH))
         val targetPage = 500 + monthDiff
+        
         if (pagerState.currentPage != targetPage) {
-            pagerState.animateScrollToPage(targetPage)
+            // 애니메이션 없이 즉시 이동하여 중간 월(June 등)에 의한 오작동 방지
+            pagerState.scrollToPage(targetPage)
         }
     }
 

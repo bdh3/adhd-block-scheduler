@@ -313,7 +313,7 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                                         Surface(
                                             modifier = Modifier
                                                 .weight(1f)
-                                                .height(56.dp)
+                                                .height(48.dp)
                                                 .clickable(enabled = !uiState.isTimerActive) { 
                                                     alarmInterval = f
                                                     restMinutes = r
@@ -322,32 +322,25 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                                             color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
                                             border = if (isSelected) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                                         ) {
-                                            Column(
-                                                horizontalAlignment = Alignment.CenterHorizontally,
-                                                verticalArrangement = Arrangement.Center
+                                            Row(
+                                                horizontalArrangement = Arrangement.Center,
+                                                verticalAlignment = Alignment.CenterVertically
                                             ) {
-                                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                                    Icon(
-                                                        imageVector = if (f == 25) Icons.Default.Timer else Icons.Default.Star,
-                                                        contentDescription = null,
-                                                        modifier = Modifier.size(14.dp),
-                                                        tint = if (isSelected) MaterialTheme.colorScheme.onPrimary 
-                                                                else if (uiState.isTimerActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.38f)
-                                                                else MaterialTheme.colorScheme.primary
-                                                    )
-                                                    Spacer(modifier = Modifier.width(4.dp))
-                                                    Text(
-                                                        "${f}/${r}",
-                                                        style = MaterialTheme.typography.labelLarge,
-                                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimary 
-                                                                else if (uiState.isTimerActive) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                                                                else MaterialTheme.colorScheme.onSurface
-                                                    )
-                                                }
+                                                Icon(
+                                                    imageVector = if (f == 25) Icons.Default.Timer else Icons.Default.Star,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(14.dp),
+                                                    tint = if (isSelected) MaterialTheme.colorScheme.onPrimary 
+                                                            else if (uiState.isTimerActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.38f)
+                                                            else MaterialTheme.colorScheme.primary
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
                                                 Text(
-                                                    "${f}분 집중 + ${r}분 휴식",
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f) else MaterialTheme.colorScheme.outline
+                                                    "${f}/${r}",
+                                                    style = MaterialTheme.typography.labelLarge,
+                                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimary 
+                                                            else if (uiState.isTimerActive) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                                            else MaterialTheme.colorScheme.onSurface
                                                 )
                                             }
                                         }
@@ -407,35 +400,30 @@ fun SettingsScreen(viewModel: SchedulerViewModel) {
                                                 steps = (60 - alarmInterval - 1).coerceAtLeast(0)
                                             )
                                         }
-                                        Text(
-                                            "* 60분의 약수에 맞춰 자동 보정됩니다.", 
-                                            style = MaterialTheme.typography.labelSmall, 
-                                            color = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.padding(start = 4.dp)
-                                        )
-
-                                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
-
-                                        Text("전체 집중 시간", style = MaterialTheme.typography.labelMedium)
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            val hours = defaultTotalMinutes / 60
-                                            val mins = defaultTotalMinutes % 60
-                                            val timeText = if (hours > 0) "${hours}시간 ${mins}분" else "${mins}분"
-                                            
-                                            Text(timeText, modifier = Modifier.width(80.dp), style = MaterialTheme.typography.bodyMedium)
-                                            Slider(
-                                                value = defaultTotalMinutes.toFloat(),
-                                                onValueChange = { 
-                                                    defaultTotalMinutes = (it.toInt() / 30) * 30
-                                                },
-                                                enabled = !uiState.isTimerActive,
-                                                valueRange = 30f..480f,
-                                                modifier = Modifier.weight(1f),
-                                                steps = 14
-                                            )
-                                        }
                                     }
                                 }
+                            }
+
+                            // [v1.8.3-patch15] 전체 집중 시간 설정은 모드와 관계없이 항상 노출되어야 함
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+
+                            Text("전체 집중 시간", style = MaterialTheme.typography.labelMedium)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                val hours = defaultTotalMinutes / 60
+                                val mins = defaultTotalMinutes % 60
+                                val timeText = if (hours > 0) "${hours}시간 ${mins}분" else "${mins}분"
+                                
+                                Text(timeText, modifier = Modifier.width(80.dp), style = MaterialTheme.typography.bodyMedium)
+                                Slider(
+                                    value = defaultTotalMinutes.toFloat(),
+                                    onValueChange = { 
+                                        defaultTotalMinutes = (it.toInt() / 30) * 30
+                                    },
+                                    enabled = !uiState.isTimerActive,
+                                    valueRange = 30f..480f,
+                                    modifier = Modifier.weight(1f),
+                                    steps = 14
+                                )
                             }
                         }
                     }

@@ -148,9 +148,11 @@ class NotificationHelper private constructor(private val context: Context) {
             else -> restSoundId
         }
         
+        // [v1.8.3-patch3] 알람 노출 방식(설정) 최우선 원칙 적용
+        // 1. 기본: 사용자의 노출 모드 설정(useFullScreen)을 그대로 따름 (소리/진동 여부 무관)
+        // 2. 예외: 팝업 설정 중이라도, 소리가 켜져 있고 벨소리(Ringtone) 종류라면 전체 화면 강제
         val isRingtone = soundEnabled && sId == "ringtone"
-        val isManualFullScreen = useFullScreen && (soundEnabled || vibrationEnabled)
-        val forceFullScreen = isRingtone || isManualFullScreen
+        val forceFullScreen = useFullScreen || isRingtone
         
         stopAllAlerts()
         isLoopingActive = forceFullScreen

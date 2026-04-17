@@ -13,6 +13,7 @@ import android.os.IBinder
 import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -68,18 +69,25 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    override fun onStart() {
-        super.onStart()
-    }
-
-    override fun onStop() {
-        super.onStop()
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen() // 시스템 스플래시 활성화
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // [v1.8.3-patch] 뒤로 가기 시 앱 종료 처리 (타이머 미동작 시에만)
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (!viewModel.uiState.value.isTimerActive) {
+                    // 타이머가 동작 중이 아니면 앱을 종료하여 재진입 시 초기 화면(Splash) 유도
+                    finish()
+                } else {
+                    // 타이머 동작 중이면 시스템 기본 동작(백그라운드 이동) 수행
+                    isEnabled = false
+                    onBackPressedDispatcher.onBackPressed()
+                    isEnabled = true
+                }
+            }
+        })
 
         // [v1.7.3] 서비스 바인딩을 onCreate로 이동하여 백그라운드/알람 상태에서도 연결 유지
         Intent(this, TimerService::class.java).also { intent ->

@@ -6,7 +6,12 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ScheduleDao {
-    @Query("SELECT * FROM schedule_blocks WHERE startTimeMillis >= :startOfDay AND startTimeMillis < :endOfDay ORDER BY startTimeMillis ASC")
+    @Query("""
+        SELECT * FROM schedule_blocks 
+        WHERE startTimeMillis < :endOfDay 
+          AND (startTimeMillis + (durationMinutes * 60000)) > :startOfDay 
+        ORDER BY startTimeMillis ASC
+    """)
     fun getSchedulesForDay(startOfDay: Long, endOfDay: Long): Flow<List<ScheduleBlock>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)

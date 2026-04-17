@@ -196,10 +196,16 @@ class SchedulerViewModel(
                 val fullScreen = values[18] as Boolean
 
                 _uiState.update { state ->
-                    val newSessionTotal = if (!state.isTimerActive && state.selectedTaskId == null) defTotal else state.sessionTotalMinutes
-                    val newInterval = if (!state.isTimerActive && state.selectedTaskId == null) interval else state.alarmIntervalMinutes
-                    val newRest = if (!state.isTimerActive && state.selectedTaskId == null) rest else state.restMinutes
+                    // 타이머가 동작 중이거나 특정 작업이 이미 선택된 상태라면 설정 변경을 UI에 덮어씌우지 않음 (v1.8.3-patch14)
+                    val isSessionLocked = state.isTimerActive || state.selectedTaskId != null
+                    val newSessionTotal = if (!isSessionLocked) defTotal else state.sessionTotalMinutes
+                    val newInterval = if (!isSessionLocked) interval else state.alarmIntervalMinutes
+                    val newRest = if (!isSessionLocked) rest else state.restMinutes
                     
+                    val newTimeBlocks = if (!isSessionLocked) {
+                        generateBlocks(newInterval, newRest, newSessionTotal * 60)
+                    } else state.timeBlocks
+
                     state.copy(
                         allSchedules = allSchedules,
                         alarmIntervalMinutes = newInterval,
@@ -223,9 +229,11 @@ class SchedulerViewModel(
                         useFullScreenAlarm = fullScreen,
                         storedAlarmIntervalMinutes = interval,
                         storedRestMinutes = rest,
-                        timeBlocks = if (!state.isTimerActive) {
-                            generateBlocks(newInterval, newRest, newSessionTotal * 60)
-                        } else state.timeBlocks
+                        remainingSeconds = if (!isSessionLocked && newTimeBlocks.isNotEmpty()) {
+                            newTimeBlocks.first().durationMinutes * 60
+                        } else state.remainingSeconds,
+                        totalRemainingSeconds = if (!isSessionLocked) newSessionTotal * 60 else state.totalRemainingSeconds,
+                        timeBlocks = newTimeBlocks
                     )
                 }
             }.collect()
@@ -568,6 +576,8 @@ class SchedulerViewModel(
         // 타이머 동작 중에는 세션 로드 차단 (데이터 박제)
         if (_uiState.value.isTimerActive) return
 
+        val newBlocks = generateBlocks(schedule.intervalMinutes, schedule.restMinutes, schedule.durationMinutes * 60)
+        
         _uiState.update { it.copy(
             selectedTaskId = schedule.id, // [v1.7.6-patch] 스케줄 ID를 taskId로 활용하여 추적성 확보
             selectedTaskTitle = schedule.taskTitle,
@@ -575,43 +585,58 @@ class SchedulerViewModel(
             sessionTotalMinutes = schedule.durationMinutes,
             alarmIntervalMinutes = schedule.intervalMinutes,
             restMinutes = schedule.restMinutes,
-            isTimerActive = false
+            isTimerActive = false,
+            // [v1.8.3-patch13] 로드된 작업의 설정에 맞춰 UI 즉시 동기화
+            timeBlocks = newBlocks,
+            remainingSeconds = if (newBlocks.isNotEmpty()) newBlocks.first().durationMinutes * 60 else schedule.durationMinutes * 60,
+            totalRemainingSeconds = schedule.durationMinutes * 60,
+            currentBlockIndex = 0
         ) }
     }
 
     fun addSchedule(
         taskTitle: String,
         durationMinutes: Int,
-        startTimeHour: Int,
+        startTimeHour: Int, // 기존 UI 호환성을 위해 유지하되, 내부에서는 selectedBlocks 우선 사용
         startTimeMinute: Int,
         startNewSession: Boolean = false,
         intervalMinutes: Int = 15,
         restMinutes: Int = 0
     ) {
         viewModelScope.launch {
-            val calendar = Calendar.getInstance().apply {
-                timeInMillis = _selectedDate.value
-                set(Calendar.HOUR_OF_DAY, startTimeHour)
-                set(Calendar.MINUTE, startTimeMinute)
-                set(Calendar.SECOND, 0)
-                set(Calendar.MILLISECOND, 0)
+            // [v1.8.3-patch7] 날짜 계산 버그 근본 해결:
+            // UI에서 선택된 블록들(selectedBlocks) 중 가장 이른 시간을 실제 시작 시간으로 사용합니다.
+            // 이렇게 하면 날짜를 넘나들며 선택하더라도 첫 블록의 정확한 날짜/시간이 보존됩니다.
+            val selectedBlocks = _uiState.value.selectedBlocks
+            val finalStartTimeMillis = if (selectedBlocks.isNotEmpty()) {
+                selectedBlocks.minOrNull()!!
+            } else {
+                // 백업 로직: 선택된 블록이 없는 경우(직접 입력 등)에만 기존의 _selectedDate 기반 계산 수행
+                val baseCal = Calendar.getInstance().apply { timeInMillis = _selectedDate.value }
+                Calendar.getInstance().apply {
+                    clear()
+                    set(baseCal.get(Calendar.YEAR), baseCal.get(Calendar.MONTH), baseCal.get(Calendar.DAY_OF_MONTH), 
+                        startTimeHour, startTimeMinute, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }.timeInMillis
             }
             
             val schedule = ScheduleBlock(
                 taskTitle = taskTitle,
-                startTimeMillis = calendar.timeInMillis,
+                startTimeMillis = finalStartTimeMillis,
                 durationMinutes = durationMinutes,
                 intervalMinutes = intervalMinutes,
                 restMinutes = restMinutes
             )
             scheduleRepository.insertSchedule(schedule)
             
-            // Task 테이블에도 추가 (오늘 날짜인 경우)
+            // Task 테이블 동기화 (오늘 날짜인 경우)
             val todayStart = Calendar.getInstance().apply {
                 set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
             }.timeInMillis
+            
             val scheduleDate = Calendar.getInstance().apply {
-                timeInMillis = calendar.timeInMillis
+                timeInMillis = finalStartTimeMillis
                 set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
             }.timeInMillis
             
@@ -620,16 +645,19 @@ class SchedulerViewModel(
                     id = schedule.id,
                     title = taskTitle,
                     scheduledDateMillis = scheduleDate,
-                    startTimeMillis = calendar.timeInMillis
+                    startTimeMillis = finalStartTimeMillis,
+                    durationMinutes = durationMinutes
                 ))
             }
 
             if (startNewSession) {
-                // 타이머 동작 중이 아닐 때만 새 세션 로드
                 if (!_uiState.value.isTimerActive) {
                     loadScheduledSession(schedule)
                 }
             }
+            
+            // 일정 생성 후 선택 영역 초기화
+            clearSelectedBlocks()
         }
     }
 
